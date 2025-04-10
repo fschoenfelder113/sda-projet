@@ -78,13 +78,23 @@ void affiche_descendance(Genealogie g, Ident x, Chaine buf);
 /// ///////////////////////////////////////////////////////
 ///
 
-#define VIVANT {0, 0, 0}
+#define DATE_VIDE {0, 0, 0}
 #define TAILLE_INIT 10
 
 //PRE: None
 Ent compDate(Date d1, Date d2)
 {
-	return 0;
+	// calculer les différences
+  	Ent annee = (d1.annee - d2.annee) ;
+	Ent mois = (d1.mois - d2.mois) ;
+ 	Ent jour = (d1.jour - d2.jour) ;
+
+ 	// analyser tous les cas
+	if (annee < 0)  return -1 ; // diff  année
+   	if (annee == 0 && mois  < 0)  return -1 ; // meme année diff mois
+   	if (annee + mois == 0 && jour  < 0 ) return -1 ; // meme annee et mois diff jour
+	if (annee + mois + jour == 0) return 0 ; // meme jour
+   	return 1 ; // tous les autres cas, différence positive
 }
 
 //PRE: None
@@ -146,37 +156,44 @@ Nat cardinal(Genealogie g) { return g->nb_individus ; }
 Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident) k] ; }
 
 //PRE: None
-/* permet d acceder a un indivdue avec son identidiant
- * Les rangs sont triés dans l'odre croissants des identifiants, on va donc faire une recherche dicothomique avec la table des rangs qui contient l'indice des individus dans tab
- */
- Individu getByIdent(Genealogie g, Ident i)
+// permet d acceder a un indivdue avec son identidiant. je pars du principe que g est initialisé
+Individu getByIdent(Genealogie g, Ident i)
 {
-	Ent mid;
-	Ent min = 0 ;
-	Ent max = g->nb_individus -1 ;
-
-	while (min <= max)
-	{
-		mid = (min+max)/2 ;
-		if ( g->tab[g->rang[mid]]->id == i)
-			return g->tab[g->rang[mid]] ; // recup l'indice dans rang puis si l indiivdu avec ce rang dans tab est celui avec l id recherché, le retourne
-		if ( g->tab[g->rang[mid]]->id > i)
-			min = mid+1 ;
-		else
-	       		max = mid-1 ;
-  	}
-	return NULL ; // si rien n est trouvé par defaut
+	if (i > g->nb_individus)
+		return NULL ;
+   	return g->tab[i-1] ;
 }
 
 //PRE: None
 Nat getPos(Genealogie g, Chaine name)
 {
-	return 0;
+	Ent mid ;
+	Ent min = 0 ;
+	Ent max = g->nb_individus ;
+	Nat diff ;
+	while (min <= max)
+	{
+		mid = (min+max) /2 ;
+		diff = chaineCompare( name,g->tab[mid]->nom ) ;
+		// on regarde si il y a une différence et on garde celle ci
+		if (diff==0)
+			return mid ; // on retourne l'indice trouvé
+		// diff est négatif si name trop petit, donc on déscend l'interval
+    		if (diff < 0)
+			max = mid-1 ;
+		else
+			min = mid+1 ;
+    	}
+	return min ;
 }
 
 //PRE: None
+/*
+ * On utilise la dichotomie pour recherceher
+ */
 Individu getByName(Genealogie g, Chaine name, Date naissance)
 {
+
 	return NULL;
 }
 
