@@ -1,6 +1,5 @@
 // canevas.c   pour projet Genealogie SDA2 2024-25�
 //
-
 // Schoenfelder Franck
 ///////////////////////////////////
 
@@ -105,7 +104,7 @@ void genealogieInit(Genealogie *g)
 void genealogieFree(Genealogie *g)
 {
 	// libérer les elements du tableau
-  	for (int i = 0 ; i < (*g)->nb_individus ; i ++)
+  	for (Ent i = 0 ; i < (*g)->nb_individus ; i ++)
  	{
  		freeIndividu((*g)->tab[i]) ;
 	}
@@ -140,16 +139,33 @@ void freeIndividu(Individu id)
 }
 
 // Selecteur
-// //////////////////// préconditions de non vacuité avec chacuns des arguments
+// //////////////////// préconditions de non vacuité avec chacuns des arguments et k >= 0
 Chaine nomIndividu(Individu ind) { return ind->nom ; }
 Date naissIndividu(Individu ind) { return ind->naiss ; }
 Nat cardinal(Genealogie g) { return g->nb_individus ; }
 Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident) k] ; }
 
 //PRE: None
-Individu getByIdent(Genealogie g, Ident i)
+/* permet d acceder a un indivdue avec son identidiant
+ * Les rangs sont triés dans l'odre croissants des identifiants, on va donc faire une recherche dicothomique avec la table des rangs qui contient l'indice des individus dans tab
+ */
+ Individu getByIdent(Genealogie g, Ident i)
 {
-	return NULL;
+	Ent mid;
+	Ent min = 0 ;
+	Ent max = g->nb_individus -1 ;
+
+	while (min <= max)
+	{
+		mid = (min+max)/2 ;
+		if ( g->tab[g->rang[mid]]->id == i)
+			return g->tab[g->rang[mid]] ; // recup l'indice dans rang puis si l indiivdu avec ce rang dans tab est celui avec l id recherché, le retourne
+		if ( g->tab[g->rang[mid]]->id > i)
+			min = mid+1 ;
+		else
+	       		max = mid-1 ;
+  	}
+	return NULL ; // si rien n est trouvé par defaut
 }
 
 //PRE: None
