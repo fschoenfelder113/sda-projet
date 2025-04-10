@@ -5,6 +5,7 @@
 ///////////////////////////////////
 
 #include "base.h"
+#include <stdio.h>
 
 // Tyes predefinis
 #define LG_MAX  64
@@ -104,7 +105,7 @@ void genealogieInit(Genealogie *g)
 void genealogieFree(Genealogie *g)
 {
 	// libérer les elements du tableau
-  	for (int i = 0 ; i < (*g)->taille_max_tab ; i ++)
+  	for (int i = 0 ; i < (*g)->nb_individus ; i ++)
  	{
  		freeIndividu((*g)->tab[i]) ;
 	}
@@ -112,6 +113,7 @@ void genealogieFree(Genealogie *g)
    	FREE((*g)->tab) ;
    	FREE((*g)->rang) ;
 
+ 	FREE(*g) ;
   	// les autres éléments sont statique
 }
 
@@ -138,11 +140,11 @@ void freeIndividu(Individu id)
 }
 
 // Selecteur
-// ////////////////////
-Chaine nomIndividu(Individu ind) { return ""; }
-Date naissIndividu(Individu ind) { Date d = { 0,0,0 }; return d; }
-Nat cardinal(Genealogie g) { return 0; }
-Individu kieme(Genealogie g, Nat k) { return NULL; }
+// //////////////////// préconditions de non vacuité avec chacuns des arguments
+Chaine nomIndividu(Individu ind) { return ind->nom ; }
+Date naissIndividu(Individu ind) { return ind->naiss ; }
+Nat cardinal(Genealogie g) { return g->nb_individus ; }
+Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident) k] ; }
 
 //PRE: None
 Individu getByIdent(Genealogie g, Ident i)
