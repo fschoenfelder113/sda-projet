@@ -6,7 +6,7 @@ BIN_DIR := ./bin
 OBJ_DIR := $(BIN_DIR)/obj
 
 # Flags
-CFLAGS = -I$(INC_DIR) -Wall -Wextra -g no-Wunused-parameter
+CFLAGS = -I$(INC_DIR) -Wall -Wextra -g -Wno-unused-parameter
 LDFLAGS =
 
 # Target program

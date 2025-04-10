@@ -16,12 +16,19 @@ typedef Nat Ident;
 
 typedef struct s_individu {
 	Car nom[LG_MAX];
-	// a completer ici
+	Date naiss ;
+	Date deces ;
+	Ident id ;
+	Ident idpere ;
+	Ident idmere ;
 } *Individu;
 
 typedef struct s_genealogie {
 	Individu* tab;				// tableau des individus tri�s par nom
-	// a completer ici
+	Ent nb_individus ;			// commence a 1
+	Ident id_cur ;				// id du prochain nouvelle indiviu
+	Ident* rang ; 				// meme taille que tab, T(i) = tab[rang[i-1])
+	Ent taille_max_tab ; // taille actuelle du tableau (on double a chaque fois ?)
 } *Genealogie;
 
 // DEFINIR ICI VOS CONSTANTES
@@ -71,6 +78,9 @@ void affiche_descendance(Genealogie g, Ident x, Chaine buf);
 /// ///////////////////////////////////////////////////////
 ///
 
+#define VIVANT {0, 0, 0}
+#define TAILLE_INIT 10
+
 //PRE: None
 Ent compDate(Date d1, Date d2)
 {
@@ -80,24 +90,51 @@ Ent compDate(Date d1, Date d2)
 //PRE: None
 void genealogieInit(Genealogie *g)
 {
-	*g = NULL;
+	*g = MALLOC(struct s_genealogie) ; // Init de g
+
+  	//Init des tableaux dynamiques et variables
+        (*g)->tab = MALLOCN( Individu, TAILLE_INIT ) ;
+ 	(*g)->nb_individus = 0 ;
+	(*g)->id_cur = 1 ; // premier id possible
+ 	(*g)->rang = MALLOCN( Ident, TAILLE_INIT ) ;
+	(*g)->taille_max_tab = TAILLE_INIT ; // premier id possible
 }
 
 //PRE: None
 void genealogieFree(Genealogie *g)
 {
-	*g = NULL;
+	// libérer les elements du tableau
+  	for (int i = 0 ; i < (*g)->taille_max_tab ; i ++)
+ 	{
+ 		freeIndividu((*g)->tab[i]) ;
+	}
+   	// liberer les tableaux
+   	FREE((*g)->tab) ;
+   	FREE((*g)->rang) ;
+
+  	// les autres éléments sont statique
 }
 
 //PRE: None
 Individu nouvIndividu(Ident i, Chaine s, Ident p, Ident m, Date n, Date d)
 {
-	return NULL;
+	if (s[0] == '\0') return NULL ; // individue invalide
+
+	Individu idv = MALLOC(struct s_individu ) ;
+  	chaineCopie(idv->nom, s) ;
+ 	idv->naiss = n ;
+ 	idv->deces = d ;
+	idv->id = i ;
+	idv->idpere = p ;
+	idv->idmere = m ;
+
+  	return idv ;
 }
 
 //PRE: None
 void freeIndividu(Individu id)
 {
+	FREE(id) ;
 }
 
 // Selecteur
