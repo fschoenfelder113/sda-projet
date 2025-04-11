@@ -159,7 +159,7 @@ Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident) k] ; }
 // permet d acceder a un indivdue avec son identidiant. je pars du principe que g est initialisé
 Individu getByIdent(Genealogie g, Ident i)
 {
-	if (i > g->nb_individus)
+	if ((Ent)i >= g->nb_individus)
 		return NULL ;
    	return g->tab[i-1] ;
 }
@@ -169,8 +169,8 @@ Nat getPos(Genealogie g, Chaine name)
 {
 	Ent mid ;
 	Ent min = 0 ;
-	Ent max = g->nb_individus ;
-	Nat diff ;
+	Ent max = g->nb_individus-1 ;
+	Ent diff ;
 	while (min <= max)
 	{
 		mid = (min+max) /2 ;
@@ -193,8 +193,23 @@ Nat getPos(Genealogie g, Chaine name)
  */
 Individu getByName(Genealogie g, Chaine name, Date naissance)
 {
+        if (g->nb_individus == 0) return NULL ;
+	Nat pos = getPos(g, name) ;
+ 	Individu idv = g->tab[pos] ;
+        //        On doit vérifier que la postion donnée est bien le pbon nom, si ce n'est pas le cas on retourne null
+        if (chaineCompare(idv->nom, name) != 0) return NULL ;
+        //        Si la date n'est pas nulle, on retoune l'individu qui est le premier trouvé
+        if (naissance.annee != 0 || naissance.mois != 0 || naissance.jour != 0) return idv ;
 
-	return NULL;
+        //        Si aucun des cas précédent, on parcour le reste de la liste jusqu a sa fin ou jusqu a ce que le nom ne corresponde plus et a chaque intération idv devient le plus jeune
+        Ent diff ;
+        while ((Ent)++pos < g->nb_individus && (chaineCompare(g->tab[pos]->nom, name) == 0))
+        {
+                //                 selection du plus petit
+                diff = compDate(idv->naiss ,g->tab[pos]->naiss) ;
+                if (diff > 0) idv = g->tab[pos] ; // si la nouvelle position est plus petite on change l individu a retourner
+        }
+        return idv ;
 }
 
 //PRE: (pos>=1 => chaineCompare(g[pos-1]->nom,s)<=0)
