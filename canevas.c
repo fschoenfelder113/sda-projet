@@ -21,14 +21,16 @@ typedef struct s_individu {
 	Ident id ;
 	Ident idpere ;
 	Ident idmere ;
+        Ident icadet ;                          // id du premier fils de cet individu
+        Ident ifaine ;                          // id du prochain frere
 } *Individu;
 
 typedef struct s_genealogie {
 	Individu* tab;				// tableau des individus tri�s par nom
-	Ent nb_individus ;			// commence a 1
+	Nat nb_individus ;			// commence a 1
 	Ident id_cur ;				// id du prochain nouvelle indiviu
 	Ident* rang ; 				// meme taille que tab, T(i) = tab[rang[i-1])
-	Ent taille_max_tab ; // taille actuelle du tableau (on double a chaque fois ?)
+	Nat taille_max_tab ; // taille actuelle du tableau (on double a chaque fois ?)
 } *Genealogie;
 
 // DEFINIR ICI VOS CONSTANTES
@@ -108,13 +110,14 @@ void genealogieInit(Genealogie *g)
 	(*g)->id_cur = 1 ; // premier id possible
  	(*g)->rang = MALLOCN( Ident, TAILLE_INIT ) ;
 	(*g)->taille_max_tab = TAILLE_INIT ; // premier id possible
+
 }
 
 //PRE: None
 void genealogieFree(Genealogie *g)
 {
 	// libérer les elements du tableau
-  	for (Ent i = 0 ; i < (*g)->nb_individus ; i ++)
+  	for (Nat i = 0 ; i < (*g)->nb_individus ; i ++)
  	{
  		freeIndividu((*g)->tab[i]) ;
 	}
@@ -138,6 +141,8 @@ Individu nouvIndividu(Ident i, Chaine s, Ident p, Ident m, Date n, Date d)
 	idv->id = i ;
 	idv->idpere = p ;
 	idv->idmere = m ;
+    idv->icadet = omega ; // seront initilisés lors de adj
+    idv->ifaine = omega ;
 
   	return idv ;
 }
@@ -159,7 +164,7 @@ Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident) k] ; }
 // permet d acceder a un indivdue avec son identidiant. je pars du principe que g est initialisé
 Individu getByIdent(Genealogie g, Ident i)
 {
-	if ((Ent)i >= g->nb_individus)
+	if ((Nat)i >= g->nb_individus)
 		return NULL ;
    	return g->tab[i-1] ;
 }
@@ -167,24 +172,33 @@ Individu getByIdent(Genealogie g, Ident i)
 //PRE: None
 Nat getPos(Genealogie g, Chaine name)
 {
-	Ent mid ;
-	Ent min = 0 ;
-	Ent max = g->nb_individus-1 ;
+    Bool trouve = false ;
+	Nat mid ;
+    Nat pos = 0 ;
+	Nat min = 0 ;
+	Nat max = g->nb_individus-1 ;
 	Ent diff ;
-	while (min <= max)
+	while ( !trouve && min <= max)
 	{
 		mid = (min+max) /2 ;
 		diff = chaineCompare( name,g->tab[mid]->nom ) ;
 		// on regarde si il y a une différence et on garde celle ci
-		if (diff==0)
-			return mid ; // on retourne l'indice trouvé
+		if (diff==0){
+			pos = mid ; // on retourne l'indice trouvé
+            trouve = true ;
+        }
 		// diff est négatif si name trop petit, donc on déscend l'interval
     		if (diff < 0)
 			max = mid-1 ;
 		else
 			min = mid+1 ;
-    	}
-	return min ;
+    }
+    if ( !trouve ) return min ; // rien de trouvé, pas de corresp
+
+//        une corresp a été trouvé, on regarde  si elle des elements du meme nom avant elle
+    while ( ((Ent) pos-1) >= 0 && chaineCompare(name, g->tab[pos-1]->nom ) == 0 ) pos -- ; // on retourne en arriere jusqu a trouver le premier element du nom
+
+    return pos ; // une
 }
 
 //PRE: None
@@ -193,23 +207,28 @@ Nat getPos(Genealogie g, Chaine name)
  */
 Individu getByName(Genealogie g, Chaine name, Date naissance)
 {
-        if (g->nb_individus == 0) return NULL ;
-	Nat pos = getPos(g, name) ;
- 	Individu idv = g->tab[pos] ;
-        //        On doit vérifier que la postion donnée est bien le pbon nom, si ce n'est pas le cas on retourne null
-        if (chaineCompare(idv->nom, name) != 0) return NULL ;
-        //        Si la date n'est pas nulle, on retoune l'individu qui est le premier trouvé
-        if (naissance.annee != 0 || naissance.mois != 0 || naissance.jour != 0) return idv ;
+    if (g->nb_individus == 0) return NULL ;
 
-        //        Si aucun des cas précédent, on parcour le reste de la liste jusqu a sa fin ou jusqu a ce que le nom ne corresponde plus et a chaque intération idv devient le plus jeune
-        Ent diff ;
-        while ((Ent)++pos < g->nb_individus && (chaineCompare(g->tab[pos]->nom, name) == 0))
-        {
-                //                 selection du plus petit
-                diff = compDate(idv->naiss ,g->tab[pos]->naiss) ;
-                if (diff > 0) idv = g->tab[pos] ; // si la nouvelle position est plus petite on change l individu a retourner
-        }
-        return idv ;
+    Date an0 = {0, 0, 0} ;
+    Date datecur = an0 ;
+    Individu idvcur = NULL ;
+
+    Nat pos = getPos(g, name) ; // recupere position du premier element de la liste avec le nom donné
+
+    while ( pos < g->nb_individus && chaineCompare( g->tab[pos]->nom, name ) == 0 )
+    {
+        if ( compDate( g->tab[pos]->naiss, naissance) == 0)
+            return g->tab[pos] ;
+
+        if ( compDate( g->tab[pos]->naiss, datecur) > 0 ) // plus petit ?
+            {
+                datecur = g->tab[pos]->naiss ; // garde la plus petite des deux
+                idvcur = g->tab[pos] ;
+            }
+        pos ++ ;
+    }
+
+    return idvcur ;
 }
 
 //PRE: (pos>=1 => chaineCompare(g[pos-1]->nom,s)<=0)
@@ -230,6 +249,8 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d)
 {
 	// valeurs interdites
 	if (s == NULL || s[0] == 0 || n.jour == 0 || n.mois == 0 || n.annee == 0) return omega;
+
+
 
 	return omega;
 }
