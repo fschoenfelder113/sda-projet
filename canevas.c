@@ -273,7 +273,8 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
         Individu*  err_idv ;
         Ident* err_rang ;
 
-        if (g->nb_individus + 1 >= g->taille_max_tab) {
+        g->nb_individus ++ ;
+        if (g->nb_individus >= g->taille_max_tab) {
                 err_idv = REALLOC(g->tab, Individu,g->taille_max_tab * 2);
                 if (err_idv == NULL) raler("REALLOC idv") ;
                 err_rang = REALLOC(g->rang, Ident, g->taille_max_tab * 2);
@@ -289,9 +290,42 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
                                   // correspond à l'id de idv+1
 }
 
+// fonction aux qui retourne idv avec l indice ;
+Individu indexToIdv(Genealogie g, Ident id){
+	return g->tab[ g->rang[id-1] ]  ;
+}
+
 // PRE: getByIdent(g,x)!=NULL) && getByIdent(g,filsa)!=NULL &&  (pp!=omega ||
 // mm!=omega)
-void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm) {}
+void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm) {
+
+        Individu idv = indexToIdv(g, idx) ;
+
+        Ent diff = 1; // par défaut
+
+        // cas 1 - changement de l'ainé
+        if (fils!=omega)
+                diff = compDate( idv->naiss, indexToIdv(g, fils)->naiss ) ;
+
+        if (diff > 0 ){ // on est dans cette condition seulemnt si fils vaut omega ou s il est plus jeune que idv
+                indexToIdv(g, pp)->ifaine = idx ; // on chaine l'ainée des parents
+                indexToIdv(g, mm)->ifaine = idx ;
+                idv->icadet = fils ;
+        }
+
+	Ident fratrie = fils ;
+        // cas 2 - insertion en milieu ou fin
+        // je parcours les cadets a partir de omega jusqu'a  ce qu'un soit omega ou sa naiss est inferieur à naiss de idv
+        while (
+		indexToIdv(g, fratrie)->icadet != omega &&
+		(diff = compDate(idv->naiss, indexToIdv(g, fratrie)->naiss)) > 0
+	      )
+                fratrie = indexToIdv(g, fratrie)->icadet ;
+
+	// On insert idv entre la fratrie qu on (frocement existant) a et son cadet(peut etre omega)
+	idv->icadet = indexToIdv(g, fratrie)->icadet ;
+	indexToIdv(g, fratrie)->icadet = idx ;	
+}
 
 // PRE:  (p==omega || getByIdent(g,p)!=NULL) && (m==omega ||
 // getByIdent(g,m)!=NULL) &&
