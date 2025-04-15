@@ -119,7 +119,7 @@ void genealogieInit(Genealogie *g) {
         if ((*g)->tab == NULL ) raler("malloc g->tab") ;
 
         (*g)->nb_individus = 0;
-        (*g)->id_cur = 1; // premier id possible
+        (*g)->id_cur = 0; // premier id possible
 
         (*g)->rang = MALLOCN(Ident, TAILLE_INIT);
         if ((*g)->rang == NULL ) raler("malloc g->rang") ;
@@ -169,7 +169,11 @@ void freeIndividu(Individu id) { FREE(id); }
 Chaine nomIndividu(Individu ind) { return ind->nom; }
 Date naissIndividu(Individu ind) { return ind->naiss; }
 Nat cardinal(Genealogie g) { return g->nb_individus; }
-Individu kieme(Genealogie g, Nat k) { return g->tab[(Ident)k]; }
+Individu kieme(Genealogie g, Nat k) {
+        if (k >= g->nb_individus)
+                raler("Out of range") ;
+        return g->tab[k]; 
+}
 
 // PRE: None
 //  permet d acceder a un indivdue avec son identidiant. je pars du principe que
@@ -182,29 +186,29 @@ Individu getByIdent(Genealogie g, Ident i) {
 
 // PRE: None
 Nat getPos(Genealogie g, Chaine name) {
+        
+        if (g->nb_individus == 0) return 0; 
         Bool trouve = false;
-        Nat mid;
-        Nat pos = 0;
-        Nat min = 0;
-        Nat max = g->nb_individus - 1;
+        Ent mid;
+        Ent pos = 0;
+        Ent min = 0;
+        Ent max = g->nb_individus -1 ;
         Ent diff;
         while (!trouve && min <= max) {
                 mid = (min + max) / 2;
-                diff = chaineCompare(name, g->tab[mid]->nom);
+                diff = chaineCompare(name, (g->tab[mid])->nom);
                 // on regarde si il y a une différence et on garde celle ci
                 if (diff == 0) {
-                        pos = mid; // on retourne l'indice trouvé
-                        trouve = true;
-                }
-                // diff est négatif si name trop petit, donc on déscend
-                // l'interval
-                if (diff < 0)
+                        trouve = true; // on retourne l'indice trouvé
+                        pos = mid ; 
+                } else if (diff < 0){
                         max = mid - 1;
-                else
+                }else{
                         min = mid + 1;
+                }
         }
-        if (!trouve)
-                return min; // rien de trouvé, pas de corresp
+
+        if (!trouve) return pos; // rien de trouvé, pas de corresp
 
         //        une corresp a été trouvé, on regarde  si elle des elements du
         //        meme nom avant elle
@@ -213,7 +217,7 @@ Nat getPos(Genealogie g, Chaine name) {
                 pos--; // on retourne en arriere jusqu a trouver le premier
                        // element du nom
 
-        return pos; // une
+        return (Nat) pos; // une
 }
 
 // PRE: None
@@ -270,15 +274,17 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
         //          dans les deux cas on finis par decaller
 
         // on realloue les deux tableaux de g
-        Individu*  err_idv ;
-        Ident* err_rang ;
+        Individu*  r_idv ;
+        Ident* r_rang ;
 
         g->nb_individus ++ ;
         if (g->nb_individus >= g->taille_max_tab) {
-                err_idv = REALLOC(g->tab, Individu,g->taille_max_tab * 2);
-                if (err_idv == NULL) raler("REALLOC idv") ;
-                err_rang = REALLOC(g->rang, Ident, g->taille_max_tab * 2);
-                if (err_idv == NULL) raler("REALLOC rang") ;
+                r_idv = REALLOC(g->tab, Individu,g->taille_max_tab * 2);
+                if (r_idv == NULL) raler("REALLOC idv") ;
+                r_rang = REALLOC(g->rang, Ident, g->taille_max_tab * 2);
+                if (r_rang== NULL) raler("REALLOC rang") ;
+                g->tab = r_idv ;
+                g->rang = r_rang ;
         }
 
         // opération de décallage de position pour liste d individus
@@ -301,20 +307,25 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm) {
 
         Individu idv = indexToIdv(g, idx) ;
 
-        Ent diff = 1; // par défaut
+        Ent diff = 1; // par défaut on considere idv plus grand
 
-        // cas 1 - changement de l'ainé
-        if (fils!=omega)
-                diff = compDate( idv->naiss, indexToIdv(g, fils)->naiss ) ;
-
-        if (diff > 0 ){ // on est dans cette condition seulemnt si fils vaut omega ou s il est plus jeune que idv
-                indexToIdv(g, pp)->ifaine = idx ; // on chaine l'ainée des parents
-                indexToIdv(g, mm)->ifaine = idx ;
+        // cas 1 - changement de l ainée avec deux sous cas :
+        //       - fils est omega
+        //       - fils n est pas omega
+        //              si fils est omega : cadet = fils et on affefcte ainnée aux parents
+        //              si fils n est pas omega, on compare si idv est plus grand et ensuite on affecte aux parents
+        if (fils == omega || compDate( idv->naiss, indexToIdv(g, fils)->naiss )>0){
+                if (pp != omega)
+                        indexToIdv(g, pp)->ifaine = idx ; // on chaine l'ainée des parents
+                if (mm != omega)
+                        indexToIdv(g, mm)->ifaine = idx ;
                 idv->icadet = fils ;
         }
 
-	Ident fratrie = fils ;
+        if (fils == omega) return ; // on a deja placé le seul eelemnts
+
         // cas 2 - insertion en milieu ou fin
+	Ident fratrie = fils ;
         // je parcours les cadets a partir de omega jusqu'a  ce qu'un soit omega ou sa naiss est inferieur à naiss de idv
         while (
 		indexToIdv(g, fratrie)->icadet != omega &&
@@ -333,12 +344,32 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm) {
 //       getByIdent(g,m)->ifaine && compDate(getByIdent(g,p)->naiss,n)<0 &&
 //       compDate(getByIdent(g,m)->naiss,n)<0
 Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
-        // valeurs interdites
+        // valeurs interdime
         if (s == NULL || s[0] == 0 || n.jour == 0 || n.mois == 0 ||
             n.annee == 0)
                 return omega;
 
-        return omega;
+        // On doit -> ajouter l individu aux listes contigues
+        // l ajouter aux liste frere/soeur
+
+        Nat pos = getPos(g, s) ;
+
+        insert(g, pos, s, p, m, n, d) ;
+        // id affecté
+
+        // trouver le fils entre pere et mere
+        Ident fils ;
+        if (p == omega && m == omega){ // necessaire pour eviter probleme d acces
+                fils = omega ;
+        }else if (p == omega){
+                fils = indexToIdv(g, m)->ifaine ;
+        }else{ // la mere est celle qui vaut omega 
+                fils = indexToIdv(g, p)->ifaine ;
+        }
+
+        adjFils(g, g->id_cur , fils, p, m) ;
+
+        return g->id_cur;
 }
 
 //
