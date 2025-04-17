@@ -81,8 +81,6 @@ void affiche_descendance(Genealogie g, Ident x, Chaine buf);
 /// ///////////////////////////////////////////////////////
 ///
 
-#define DATE_VIDE                                                              \
-        { 0, 0, 0 }
 #define TAILLE_INIT 10
 
 void raler(const char* msg){
@@ -190,7 +188,6 @@ Nat getPos(Genealogie g, Chaine name) {
         if (g->nb_individus == 0) return 0; 
         Bool trouve = false;
         Ent mid;
-        Ent pos = 0;
         Ent min = 0;
         Ent max = g->nb_individus -1 ;
         Ent diff;
@@ -200,7 +197,6 @@ Nat getPos(Genealogie g, Chaine name) {
                 // on regarde si il y a une différence et on garde celle ci
                 if (diff == 0) {
                         trouve = true; // on retourne l'indice trouvé
-                        pos = mid ; 
                 } else if (diff < 0){
                         max = mid - 1;
                 }else{
@@ -208,16 +204,15 @@ Nat getPos(Genealogie g, Chaine name) {
                 }
         }
 
-        if (!trouve) return pos; // rien de trouvé, pas de corresp
+        if (!trouve) return min; // rien de trouvé, pas de corresp
 
         //        une corresp a été trouvé, on regarde  si elle des elements du
         //        meme nom avant elle
-        while (((Ent)pos - 1) >= 0 &&
-               chaineCompare(name, g->tab[pos - 1]->nom) == 0)
-                pos--; // on retourne en arriere jusqu a trouver le premier
+        while (mid >= min && chaineCompare(name, g->tab[mid-1]->nom) == 0)
+                mid--; // on retourne en arriere jusqu a trouver le premier
                        // element du nom
 
-        return (Nat) pos; // une
+        return (Nat) mid; // une
 }
 
 // PRE: None
@@ -260,7 +255,7 @@ réalloue des tableaux plus grands. Elle met aussi à jour le tableau rang[ ].
 // PRE: (pos>=1 => chaineCompare(g[pos-1]->nom,s)<=0)
 //      && (pos<g->nb_individus-1 => chaineCompare(g[pos+1]->nom,s)>=0)
 void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
-        Individu idv = nouvIndividu(g->id_cur++, s, p, m, n, d);
+        Individu idv = nouvIndividu(g->id_cur, s, p, m, n, d);
 
         // deix situationspossible :
         // 1 - espace suffisant : on décalle les elementsapres position dans une
@@ -292,7 +287,12 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
                 g->tab[i] = g->tab[i - 1];
 
         g->tab[pos] = idv;        // placement de idv dans sa place
-        g->rang[g->id_cur] = pos; // on ajoute a la fin de la liste, cela
+
+        // pour le rang, puisqu il change a chaque nouvel eleemnts on doit incrémenté toutes les positions superieurs a pos en le parcourant et i
+        for (Nat i = 0 ; i < g->nb_individus-1 ; i ++){
+                if(g->rang[i] >= pos) g->rang[i]++ ;
+        }
+        g->rang[g->id_cur-1] = pos; // on ajoute a la fin de la liste, cela
                                   // correspond à l'id de idv+1
 }
 
@@ -307,32 +307,27 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm) {
 
         Individu idv = indexToIdv(g, idx) ;
 
-        Ent diff = 1; // par défaut on considere idv plus grand
-
-        // cas 1 - changement de l ainée avec deux sous cas :
-        //       - fils est omega
-        //       - fils n est pas omega
-        //              si fils est omega : cadet = fils et on affefcte ainnée aux parents
-        //              si fils n est pas omega, on compare si idv est plus grand et ensuite on affecte aux parents
-        if (fils == omega || compDate( idv->naiss, indexToIdv(g, fils)->naiss )>0){
+        if (fils == omega || compDate( idv->naiss, indexToIdv(g, fils)->naiss )<0){
                 if (pp != omega)
                         indexToIdv(g, pp)->ifaine = idx ; // on chaine l'ainée des parents
                 if (mm != omega)
                         indexToIdv(g, mm)->ifaine = idx ;
                 idv->icadet = fils ;
+                return ; // ainée remplacé, on a fini
         }
 
-        if (fils == omega) return ; // on a deja placé le seul eelemnts
+        // changement d ainée : deux possibilités
+        // 1 - les parents n avaient pas d'ainées
+        // 2 - les parents le nouveau fils est plus agé que l ainée
+        // Dans les deux cas, l'ainée precédent, fils, devient le cadet du niuvel individu
 
         // cas 2 - insertion en milieu ou fin
 	Ident fratrie = fils ;
-        // je parcours les cadets a partir de omega jusqu'a  ce qu'un soit omega ou sa naiss est inferieur à naiss de idv
-        while (
-		indexToIdv(g, fratrie)->icadet != omega &&
-		(diff = compDate(idv->naiss, indexToIdv(g, fratrie)->naiss)) > 0
-	      )
-                fratrie = indexToIdv(g, fratrie)->icadet ;
 
+        // je parcours les cadets a partir de omega jusqu'a  ce qu'un soit omega ou sa naiss est inferieur à naiss de idv
+        while (indexToIdv(g, fratrie)->icadet != omega && compDate(idv->naiss, indexToIdv(g, indexToIdv(g, fratrie)->icadet )->naiss) > 0 ){
+                fratrie =indexToIdv(g, fratrie)->icadet  ;
+        }
 	// On insert idv entre la fratrie qu on (frocement existant) a et son cadet(peut etre omega)
 	idv->icadet = indexToIdv(g, fratrie)->icadet ;
 	indexToIdv(g, fratrie)->icadet = idx ;	
@@ -351,6 +346,8 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
 
         // On doit -> ajouter l individu aux listes contigues
         // l ajouter aux liste frere/soeur
+        
+        g->id_cur++;
 
         Nat pos = getPos(g, s) ;
 
@@ -359,16 +356,11 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
 
         // trouver le fils entre pere et mere
         Ident fils ;
-        if (p == omega && m == omega){ // necessaire pour eviter probleme d acces
-                fils = omega ;
-        }else if (p == omega){
-                fils = indexToIdv(g, m)->ifaine ;
-        }else{ // la mere est celle qui vaut omega 
-                fils = indexToIdv(g, p)->ifaine ;
+        if (p != omega && m != omega){
+                if (p == omega) fils = indexToIdv(g, m)->ifaine ;
+                else fils = indexToIdv(g, p)->ifaine ;
+                adjFils(g, g->id_cur , fils, p, m) ;
         }
-
-        adjFils(g, g->id_cur , fils, p, m) ;
-
         return g->id_cur;
 }
 
@@ -379,8 +371,33 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
 
 // PRE: None
 void affiche_freres_soeurs(Genealogie g, Ident x, Chaine buff) {
-        buff[0] = '\0';
+        // pas de securité sur la taille du buffer, mais il aurait fallue un type [] pour que ce soit simple
+
+        // pour recuperer tous les freres et soeur, on accède son parent. et on les ajoute au buf
+        if (x == omega) return ; // pas de frere et soeur
+
+        Ident ifils ;
+        Individu idv = indexToIdv(g, x) ;
+        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
+        if (idv->idpere == omega) ifils = indexToIdv(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
+        else ifils = indexToIdv(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
+        
+        // on a l ainée, maientant on boucle et a chque fois on ajoute le contenue de n à lngchaine en gardant n.
+        Nat n = 0 ;
+        Individu a ;
+        while ( ifils != omega){
+                a = indexToIdv(g, ifils) ;
+                if ( chaineCompare(idv->nom, a->nom) !=0 ){
+                        chaineCopie(buff+n,  a->nom) ;
+                        n += chaineLongueur(a->nom) ; //le +1 est l espace
+                        chaineCopie(buff+(n++), " ") ; // espace
+                }
+                ifils = a->icadet ;
+        }
 }
+
+// @TODO messed up insertion, not sorted
+// getByName is not working according 
 
 // PRE: None
 void affiche_enfants(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
@@ -418,6 +435,33 @@ void affiche_parente(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
 
 // PRE: None
 void affiche_descendance(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
+
+void affiche_tableaux(Genealogie g){
+        // mes tests
+        Individu tmpidv ;
+        printf("i  ,nom       ,naiss     ,deces     ,id        ,idpere    ,idmere     ,icadet     ,ifaine     \n") ;
+        putchar('\n') ;
+        for (Nat i = 0 ; i < cardinal(g) ; i ++){
+                tmpidv = g->tab[i] ;
+                printf("%-3d,%-10s,%-2d:%-2d:%-4d,%-2d:%-2d:%-4d,%-10d,%-10d,%-10d,%-10d,%-10d\n", 
+                        i,
+                        tmpidv->nom, 
+                        tmpidv->naiss.jour, tmpidv->naiss.mois, tmpidv->naiss.annee,
+                        tmpidv->deces.jour, tmpidv->deces.mois, tmpidv->deces.annee,
+                        tmpidv->id,
+                        tmpidv->idpere,
+                        tmpidv->idmere,
+                        tmpidv->icadet,
+                        tmpidv->ifaine
+                );
+        }
+
+        putchar('\n') ;
+        for (Nat i = 0 ; i < cardinal(g) ; i ++){
+                printf("%2d\n", g->rang[i]) ;
+        } 
+}
+
 
 //
 /// VOS FONCTIONS AUXILIAIRES
@@ -478,14 +522,36 @@ int main() {
         Date mn = {30, 10, 1949};
         Ident imw = adj(g, "Molly", ipre, 0, mn, dnull);
 
-        // ajouter ici les autres individus
-        Ident ig = omega;    // Ginny
-        Ident irose = omega; // Rose
-        Ident ir = omega;    // Ron
-        Ident ia2 = omega;   // Albus
-        Ident ibill = omega; // Bill
-        Ident ij = omega;    // James (son of Harry)
-        Ident ihg = omega;   // Hermione
+        Date gn = {11, 8, 1981 } ;
+        Ident ig = adj(g, "Ginny", iaw, imw, gn, dnull) ;     // Ginny
+
+        Date rn = {1, 3, 1980 } ;
+        Ident ir = adj(g, "Ron", iaw, imw, rn, dnull) ;    // Ron
+
+        Date billn = {29, 11, 1970 } ;
+        Ident ibill = adj(g, "Bill", iaw, imw, billn, dnull) ; // Bill
+
+        Date hgn = {19, 9, 1980} ;
+        Ident ihg = adj(g, "Hermione", omega, omega, hgn, dnull) ;   // Hermione
+
+        Date rosen = {6, 8, 2006} ;
+        Ident irose = adj(g, "Rose", ir, ihg, rosen, dnull) ;
+
+        Date a2n = {15, 8, 2006} ;
+        Ident ia2 = adj(g, "Albus", ih, ihg, a2n, dnull) ;   // Albus
+
+        Date jn = {1, 5, 2005} ;
+        Ident ij = adj(g, "James", ih, ihg, jn, dnull);    // James (son of Harry)
+
+        // lily fred et george
+
+        Date ln = {2, 5, 2008} ;
+        Ident il = adj(g, "Lily", ih, ihg, ln, dnull) ;
+
+        Date fgn = { 1, 4, 1978 } ;
+        Date geord = {5, 6, 1998} ;
+        Ident ifred = adj(g, "Fred", iaw, imw, fgn, geord) ;  
+        Ident igeor = adj(g, "George", iaw, imw, fgn, dnull) ;  
 
         for (Nat i = 0; i < cardinal(g); i++) {
                 printf("%s\n", nomIndividu(kieme(g, i)));
@@ -494,6 +560,9 @@ int main() {
         printf("Identifiant de Fabian: %u (must be 9)\n", ifab);
         printf("Identifiant de Arthur: %u (must be 7)\n", iaw);
 
+        affiche_tableaux(g) ; 
+
+        /*
         printf("\nAdding more people:\n");
         Date dgid = {7, 2, 1945};
         Date ddgid = {21, 12, 1982};
@@ -533,7 +602,7 @@ int main() {
         else
                 printf("what? no Albus! There is a serious problem here...\n");
         printf("Now nb_individus: %d\n", cardinal(g));
-
+*/ 
         printf("\n******* fratrie:\n");
         printf("Freres/Soeurs de %s:\n", nomIndividu(getByIdent(g, ig)));
         buf[0] = 0;
