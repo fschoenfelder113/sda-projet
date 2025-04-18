@@ -177,7 +177,7 @@ Individu kieme(Genealogie g, Nat k) {
 //  permet d acceder a un indivdue avec son identidiant. je pars du principe que
 //  g est initialisé
 Individu getByIdent(Genealogie g, Ident i) {
-        if (i <= g->nb_individus)
+        if (i <= g->nb_individus && 0 < i) // ne depasse pas du tableau
                 return g->tab[ g->rang[i-1]];
         return NULL ;
 }
@@ -475,13 +475,103 @@ void devient_mere(Genealogie g, Ident x, Ident y) {}
 ///
 
 // PRE: None
-Bool estAncetre(Genealogie g, Ident x, Ident y) { return false; }
+Bool estAncetre(Genealogie g, Ident x, Ident y) {
+        // on suivra des algo recursifs
+        Individu idv = getByIdent(g, y);
+        if (idv == NULL) return false; // out of range
+
+        Ident p = idv->idpere;
+        Ident m = idv->idmere;        
+
+        if (p == x) return true ;   
+        if (m == x) return true ;
+
+        if (p != omega && estAncetre(g, x, p)) return true;
+        if (m != omega && estAncetre(g, x, m)) return true;
+
+        return estAncetre(g, x, p) || estAncetre(g, x, m) ;
+}
+
+void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x ){
+        Individu idv = getByIdent(g, x) ;
+        if (idv == NULL) return ;
+
+        tab[ x ] = true ; // il existe dans les ancetres
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+        remplirTabAncetreX(g, tab, p) ;
+        remplirTabAncetreX(g, tab, m) ;
+}
+
+Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y){
+        Individu idv = getByIdent(g, y) ;
+        if (idv == NULL) return false;
+
+        if (tab[y]) return true; // on s arrete si trouvé
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+        return parcourirTabAncetre(g, tab, p) || parcourirTabAncetre(g, tab, m) ;
+}
 
 // PRE: None
-Bool ontAncetreCommun(Genealogie g, Ident x, Ident y) { return false; }
+Bool ontAncetreCommun(Genealogie g, Ident x, Ident y) {
+       // fonction en plusieurs etapes :
+        // creer un tableau vontigue de Booleen composé du nombre totale de g+1 et tout mettre a 0 ou false
+        // parcourir x  et mettre true a chaque identifiant de parent recusivmement -> fonction a coté
+        // ensuite on parcour y et des qu on trouve un ancetre a case qui donné on stop
+
+        if (getByIdent(g,x) == NULL || getByIdent(g, y) == NULL) return false ;
+
+        Bool* tab_ancetre = CALLOCN( Bool, g->nb_individus + 1 ) ; // +1 pour eviter futurs operations ;
+        //calloc met a 0 (false) 
+
+        remplirTabAncetreX(g, tab_ancetre, x) ;
+
+        Bool res = parcourirTabAncetre(g, tab_ancetre, y) ;
+
+        FREE(tab_ancetre) ;
+
+        return res ;
+}
 
 // PRE: None
-Ident plus_ancien(Genealogie g, Ident x) { return omega; }
+Ident plus_ancien(Genealogie g, Ident x) {
+        Individu idv = getByIdent(g, x);
+        if (idv == NULL) return omega; // Vérifie que x existe
+
+        Ident p = idv->idpere;
+        Ident m = idv->idmere;
+
+        // Si un seul parent est connu, retourne celui-ci directement
+        if (p == omega && m != omega) return plus_ancien(g, m);
+        if (m == omega && p != omega) return plus_ancien(g, p);
+
+        // Si aucun parent n'est connu, x est le plus ancien
+        if (p == omega && m == omega) return x;
+
+        // Recherche récursive du plus ancien ancêtre dans les deux branches
+        Ident ancetreP = plus_ancien(g, p);
+        Ident ancetreM = plus_ancien(g, m);
+
+        // Comparaison des dates pour trouver l'ancêtre le plus ancien
+        Individu idvP = getByIdent(g, ancetreP);
+        Individu idvM = getByIdent(g, ancetreM);
+
+        if (idvP != NULL && idvM != NULL) {
+        if (compDate(idvP->naiss, idvM->naiss) < 0) return ancetreP;
+        return ancetreM;
+        }
+
+        if (idvP != NULL) return ancetreP;
+        if (idvM != NULL) return ancetreM;
+
+        return x;
+}
+
 
 // PRE: None
 void affiche_parente(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
@@ -657,9 +747,6 @@ int main() {
                 printf("what? no Albus! There is a serious problem here...\n");
         printf("Now nb_individus: %d\n", cardinal(g));
 
-        affiche_tableaux(g) ;
-        return 0 ;
-
         printf("\n******* fratrie:\n");
         printf("Freres/Soeurs de %s:\n", nomIndividu(getByIdent(g, ig)));
         buf[0] = 0;
@@ -700,12 +787,13 @@ int main() {
         affiche_oncles(g, ir, buf);
         printf("%s\n", buf);
 
-        return 0 ;
-
         printf("\n******* les ancetres:\n");
         printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)),
                nomIndividu(getByIdent(g, ia2)),
                estAncetre(g, ijfl, ia2) ? "oui" : "non");
+
+        printf("INDICE\n") ;
+
         printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)),
                nomIndividu(getByIdent(g, irose)),
                estAncetre(g, ijfl, irose) ? "oui" : "non");
