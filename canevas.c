@@ -186,33 +186,23 @@ Individu getByIdent(Genealogie g, Ident i) {
 Nat getPos(Genealogie g, Chaine name) {
         
         if (g->nb_individus == 0) return 0; 
-        Bool trouve = false;
         Ent mid;
         Ent min = 0;
         Ent max = g->nb_individus -1 ;
-        Ent diff;
-        while (!trouve && min <= max) {
+        Ent diff = 1;
+        while (min <= max) {
                 mid = (min + max) / 2;
                 diff = chaineCompare(name, (g->tab[mid])->nom);
                 // on regarde si il y a une différence et on garde celle ci
-                if (diff == 0) {
-                        trouve = true; // on retourne l'indice trouvé
-                } else if (diff < 0){
+                if (diff < 0)
                         max = mid - 1;
-                }else{
+                else if (diff > 0)
                         min = mid + 1;
+                else{ // le nom correspond alors on regarde la date
+                        max -- ; // on regarde la premier en dessous
                 }
         }
-
-        if (!trouve) return min; // rien de trouvé, pas de corresp
-
-        //        une corresp a été trouvé, on regarde  si elle des elements du
-        //        meme nom avant elle
-        while (mid >= min && chaineCompare(name, g->tab[mid-1]->nom) == 0)
-                mid--; // on retourne en arriere jusqu a trouver le premier
-                       // element du nom
-
-        return (Nat) mid; // une
+        return min; 
 }
 
 // PRE: None
@@ -223,28 +213,32 @@ Individu getByName(Genealogie g, Chaine name, Date naissance) {
         if (g->nb_individus == 0)
                 return NULL;
 
-        Date an0 = {0, 0, 0};
-        Date datecur = an0;
+        Date datecur = {0, 0, 0};
         Individu idvcur = NULL;
 
         Nat pos = getPos(g, name); // recupere position du premier element de la
                                    // liste avec le nom donné
 
-        while (pos < g->nb_individus &&
-               chaineCompare(g->tab[pos]->nom, name) == 0) {
-                if (compDate(g->tab[pos]->naiss, naissance) == 0)
-                        return g->tab[pos];
-
-                if (compDate(g->tab[pos]->naiss, datecur) > 0) // plus petit ?
-                {
-                        datecur =
-                            g->tab[pos]->naiss; // garde la plus petite des deux
-                        idvcur = g->tab[pos];
+        if (compDate(datecur, naissance) == 0 && chaineCompare(name, g->tab[pos]->nom) == 0){ // si on veut le plus jeune si le nom existe deja
+                datecur = g->tab[pos]->naiss ;
+                while (pos < g->nb_individus && chaineCompare(name, g->tab[pos]->nom) == 0){ 
+                        if (compDate(g->tab[pos]->naiss, datecur ) > 0){ // la nouvelle position a une date plus petite que l ancienne
+                                datecur = g->tab[pos]->naiss ;
+                                idvcur = g->tab[pos] ;
+                        }
+                        pos ++ ;
                 }
-                pos++;
+        }
+        
+        // sinon on veut celui qui correspond et le retourne s il existe
+        else {
+                while (pos < g->nb_individus && chaineCompare(name, g->tab[pos]->nom) == 0){
+                        if (compDate(naissance, g->tab[pos]->naiss) == 0) return g->tab[pos] ;
+                        pos ++ ;
+                }
         }
 
-        return idvcur;
+        return idvcur ;
 }
 
 /*
@@ -274,9 +268,10 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d) {
 
         g->nb_individus ++ ;
         if (g->nb_individus >= g->taille_max_tab) {
-                r_idv = REALLOC(g->tab, Individu,g->taille_max_tab * 2);
+                g->taille_max_tab *= 2 ;
+                r_idv = REALLOC(g->tab, Individu,g->taille_max_tab);
                 if (r_idv == NULL) raler("REALLOC idv") ;
-                r_rang = REALLOC(g->rang, Ident, g->taille_max_tab * 2);
+                r_rang = REALLOC(g->rang, Ident, g->taille_max_tab);
                 if (r_rang== NULL) raler("REALLOC rang") ;
                 g->tab = r_idv ;
                 g->rang = r_rang ;
@@ -339,9 +334,14 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
             n.annee == 0)
                 return omega;
 
+
+        // verifier que element inexistant
+        if (getByName(g, s, n)) {
+                return omega ; // existe deja, rien de plus a faire
+        }
         // On doit -> ajouter l individu aux listes contigues
         // l ajouter aux liste frere/soeur
-        
+
         g->id_cur++;
 
         Nat pos = getPos(g, s) ;
@@ -613,8 +613,9 @@ int main() {
         printf("Identifiant de Fabian: %u (must be 9)\n", ifab);
         printf("Identifiant de Arthur: %u (must be 7)\n", iaw);
 
-        /*
         printf("\nAdding more people:\n");
+
+        /*
         Date dgid = {7, 2, 1945};
         Date ddgid = {21, 12, 1982};
         Ident igid = adj(g, "Gideon", 0, 0, dgid, ddgid);
@@ -624,6 +625,8 @@ int main() {
         Ident ihugo = adj(g, "Hugo", 0, 0, dhugo, dnull);
         printf("Linking Hugo as son of Hermione\n");
         devient_mere(g, ihg, ihugo);
+
+        */        
 
         printf("\nTry to add a double Harry:\n");
         Date hu2n = {31, 7, 1980};
@@ -653,7 +656,10 @@ int main() {
         else
                 printf("what? no Albus! There is a serious problem here...\n");
         printf("Now nb_individus: %d\n", cardinal(g));
-*/ 
+
+        affiche_tableaux(g) ;
+        return 0 ;
+
         printf("\n******* fratrie:\n");
         printf("Freres/Soeurs de %s:\n", nomIndividu(getByIdent(g, ig)));
         buf[0] = 0;
@@ -693,6 +699,8 @@ int main() {
         buf[0] = 0;
         affiche_oncles(g, ir, buf);
         printf("%s\n", buf);
+
+        return 0 ;
 
         printf("\n******* les ancetres:\n");
         printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)),
