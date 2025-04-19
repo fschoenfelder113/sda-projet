@@ -38,6 +38,8 @@ typedef struct s_genealogie {
 
 // DEFINIR ICI VOS CONSTANTES
 
+#define TAILLE_INIT 10
+
 // PARTIE 1: PROTOTYPES des operations imposees
 Ent compDate(Date d1, Date d2);
 void genealogieInit(Genealogie *g);
@@ -77,16 +79,46 @@ void affiche_descendance(Genealogie g, Ident x, Chaine buf);
 
 // PROTOTYPES DE VOS FONCTIONS INTERMEDIAIRES
 
+// global
+void raler(const char* msg) ;
+
+// affichage1
+
+// PRE: None
+void ajouteBufferN(Chaine buff, Nat* n, Chaine str) ;
+void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) ;
+void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n);
+void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n);
+
+void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x );
+Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y);
+
+// structure melangeant des operations de pile et listes
+// identifiant aurait été aussi utilisable
+struct list {
+        Ident v ;
+        struct list* s ;
+} ;
+struct list* pile_init() ;
+struct list* empile(struct list* p, Ident v) ;
+struct list* adjqueue(struct list* p, Ident v) ;
+Ident pile_top(struct list* p) ; // pre pilevide(p) == false
+struct list* depile(struct list* p) ;
+
+
+
+Nat hauteur_genealogie_de(Genealogie g, Nat x);
+Ident aineDeFratrie(Genealogie g, Ident x);
+// PRE idv a, b != NULL
+// prend un arguent deux ainés, les attache snas imortance a l ordre, ajoute le cadet du plus grand à la pile. retourne ainée
+Individu concat_cadet(Genealogie g, Individu a, Individu b, struct list* lien);
+void attache_gen_parente(Genealogie g,Ident x,  Individu *lst, struct list* liens);
+void detruire_liens_cadet(Genealogie g, struct list* liens);
+void lecture_gen(Genealogie g, Individu* lst, Chaine buff, Nat negen) ;
+
 /// PARTIE 1: Construction de l�arbre g�n�alogique et acc�s
 /// ///////////////////////////////////////////////////////
 ///
-
-#define TAILLE_INIT 10
-
-void raler(const char* msg){
-        perror(msg) ;
-        exit(-1) ;
-}
 
 // PRE: None
 Ent compDate(Date d1, Date d2) {
@@ -363,55 +395,10 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d) {
 /// PARTIE 2: Affichages
 /// ///////////////////////////////////////////////////////
 ///
-
-// ajoute au buffer a partir de n
-// n est le dernier endroit modifé
-void ajouteBufferN(Chaine buff, Nat* n, Chaine str){
-        chaineCopie(buff+*n, str) ;
-        *n += chaineLongueur(str) ;
-}
-
 // PRE: None
-void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) {
-        // pas de securité sur la taille du buffer, mais il aurait fallue un type [] pour que ce soit simple
-
-        // pour recuperer tous les freres et soeur, on accède son parent. et on les ajoute au buf
-        if (x == omega) return ; // pas de frere et soeur
-
-        Ident ifils ;
-        Individu idv = getByIdent(g, x) ;
-        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
-        if (idv->idpere == omega) ifils = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
-        else ifils = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
-        
-        // on a l ainée, maientant on boucle et a chque fois on ajoute le contenue de n à lngchaine en gardant n.
-        Individu a ;
-        while ( ifils != omega){
-                a = getByIdent(g, ifils) ;
-                if (idv->id != a->id){
-                        ajouteBufferN(buff, n, a->nom) ;
-                        ajouteBufferN(buff, n, " ") ;
-                }
-                ifils = a->icadet ;
-        }
-}
-
 void affiche_freres_soeurs(Genealogie g, Ident x, Chaine buff){
         Nat n = 0 ;
         affiche_freres_soeurs_n(g, x, buff, &n) ;
-}
-
-void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n){
-        if (x == omega) return ;
-        Ident f = getByIdent(g, x)->ifaine;
-        Individu a ;
-        while (f != omega){
-                // ajoute a la chaine
-                a = getByIdent(g, f) ;
-                ajouteBufferN(buff, n, a->nom) ;
-                ajouteBufferN(buff, n, " ") ;
-                f = a->icadet ;
-        }
 }
 
 // PRE: None
@@ -420,26 +407,7 @@ void affiche_enfants(Genealogie g, Ident x, Chaine buff) {
         affiche_enfants_n(g, x, buff, &n) ;
 }
 
-// affiche les neveux et nieces de x
-void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n){
-        if (x == omega) return ;
-        Ident frSr ;
-        // recuperer l ainée de x a partir d un des ses parents
-        Individu idv = getByIdent(g, x) ;
-        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
-        if (idv->idpere == omega) frSr = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
-        else frSr = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
-        
-        // on a l'ainée mainetnant qu on parcour et ajoute la liste dnenfant au buffer en esperant aucune consanguinité
 
-        while(frSr != omega){
-                if (frSr != x){ // on affiche pas lui meme
-                        affiche_enfants_n(g, frSr, buff,n) ;
-                }
-                frSr = getByIdent(g, frSr)->icadet ;
-        }
-
-}
 
 // PRE: None
 void affiche_cousins(Genealogie g, Ident x, Chaine buff) {
@@ -491,32 +459,6 @@ Bool estAncetre(Genealogie g, Ident x, Ident y) {
 
         return estAncetre(g, x, p) || estAncetre(g, x, m) ;
 }
-
-void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x ){
-        Individu idv = getByIdent(g, x) ;
-        if (idv == NULL) return ;
-
-        tab[ x ] = true ; // il existe dans les ancetres
-
-        Ident p = idv->idpere ;
-        Ident m = idv->idmere ;
-
-        remplirTabAncetreX(g, tab, p) ;
-        remplirTabAncetreX(g, tab, m) ;
-}
-
-Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y){
-        Individu idv = getByIdent(g, y) ;
-        if (idv == NULL) return false;
-
-        if (tab[y]) return true; // on s arrete si trouvé
-
-        Ident p = idv->idpere ;
-        Ident m = idv->idmere ;
-
-        return parcourirTabAncetre(g, tab, p) || parcourirTabAncetre(g, tab, m) ;
-}
-
 // PRE: None
 Bool ontAncetreCommun(Genealogie g, Ident x, Ident y) {
        // fonction en plusieurs etapes :
@@ -572,12 +514,265 @@ Ident plus_ancien(Genealogie g, Ident x) {
         return x;
 }
 
+// PRE: None
+void affiche_parente(Genealogie g, Ident x, Chaine buff) {
+
+        Individu idv = getByIdent(g, x) ;
+        if (idv == NULL)return ;
+
+        Nat hauteur = hauteur_genealogie_de(g, x) ;
+
+        // remplissage du tab
+        Individu* lst_aine = CALLOCN(Individu, hauteur-1) ; // tout vaudra omega par defaut
+
+        struct list* liens = pile_init() ; // contient les lien a remettre a nul
+        // tableau qui conteindra les listes de fratries de chaque générations
+
+        attache_gen_parente(g, x, lst_aine, liens) ;
+        // on remplie le tablaeu avec une premiere fonction auxiliaire 
+
+        // lecture du tab + depilage
+        lecture_gen(g, lst_aine, buff, hauteur-1) ; // h-1 etant le nombre de génération 
+
+        // remise a nulle des liens créers
+        detruire_liens_cadet(g, liens) ;
+}
 
 // PRE: None
-void affiche_parente(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
+void affiche_descendance(Genealogie g, Ident x, Chaine buff) {
+        Individu idv = getByIdent(g, x) ;
+        if (idv == NULL) return ;
+        
+}
+
+
+//
+/// VOS FONCTIONS AUXILIAIRES
+/// ///////////////////////////////////////////////////////
+///
+// on utilisera une pile pour stocker les individus les plus jeune des fratries qui seront attaché en empilant et détachées en dépilant
+
+void raler(const char* msg){
+        perror(msg) ;
+        exit(-1) ;
+}
+
+
+
+// ajoute au buffer a partir de n
+// n est le dernier endroit modifé
+void ajouteBufferN(Chaine buff, Nat* n, Chaine str){
+        chaineCopie(buff+*n, str) ;
+        *n += chaineLongueur(str) ;
+}
 
 // PRE: None
-void affiche_descendance(Genealogie g, Ident x, Chaine buff) { buff[0] = '\0'; }
+void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) {
+        // pas de securité sur la taille du buffer, mais il aurait fallue un type [] pour que ce soit simple
+
+        // pour recuperer tous les freres et soeur, on accède son parent. et on les ajoute au buf
+        if (x == omega) return ; // pas de frere et soeur
+
+        Ident ifils ;
+        Individu idv = getByIdent(g, x) ;
+        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
+        if (idv->idpere == omega) ifils = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
+        else ifils = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
+        
+        // on a l ainée, maientant on boucle et a chque fois on ajoute le contenue de n à lngchaine en gardant n.
+        Individu a ;
+        while ( ifils != omega){
+                a = getByIdent(g, ifils) ;
+                if (idv->id != a->id){
+                        ajouteBufferN(buff, n, a->nom) ;
+                        ajouteBufferN(buff, n, " ") ;
+                }
+                ifils = a->icadet ;
+        }
+}
+
+void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n){
+        if (x == omega) return ;
+        Ident f = getByIdent(g, x)->ifaine;
+        Individu a ;
+        while (f != omega){
+                // ajoute a la chaine
+                a = getByIdent(g, f) ;
+                ajouteBufferN(buff, n, a->nom) ;
+                ajouteBufferN(buff, n, " ") ;
+                f = a->icadet ;
+        }
+}
+
+void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n){
+        if (x == omega) return ;
+        Ident frSr ;
+        // recuperer l ainée de x a partir d un des ses parents
+        Individu idv = getByIdent(g, x) ;
+        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
+        if (idv->idpere == omega) frSr = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
+        else frSr = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
+        
+        // on a l'ainée mainetnant qu on parcour et ajoute la liste dnenfant au buffer en esperant aucune consanguinité
+
+        while(frSr != omega){
+                if (frSr != x){ // on affiche pas lui meme
+                        affiche_enfants_n(g, frSr, buff,n) ;
+                }
+                frSr = getByIdent(g, frSr)->icadet ;
+        }
+
+}
+
+void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x ){
+        Individu idv = getByIdent(g, x) ;
+        if (idv == NULL) return ;
+
+        tab[ x ] = true ; // il existe dans les ancetres
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+        remplirTabAncetreX(g, tab, p) ;
+        remplirTabAncetreX(g, tab, m) ;
+}
+
+Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y){
+        Individu idv = getByIdent(g, y) ;
+        if (idv == NULL) return false;
+
+        if (tab[y]) return true; // on s arrete si trouvé
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+        return parcourirTabAncetre(g, tab, p) || parcourirTabAncetre(g, tab, m) ;
+}
+
+
+struct list* pile_init(){
+        return NULL ;
+}
+
+struct list* empile(struct list* p, Ident v){
+        struct list* pnouv = MALLOC(struct list) ;
+        if (pnouv == NULL) raler("MALLOC PILE") ;
+        pnouv->v = v ;
+        pnouv->s = p ;
+        return pnouv ;
+}
+
+struct list* adjqeue(struct list* p, Ident v){
+        struct list* pnouv = MALLOC(struct list) ;
+        if (pnouv == NULL) raler("MALLOC PILE") ;
+        pnouv->v = v ;
+        if (p == NULL) return pnouv ;
+        while(p->s != NULL) p = p->s ;
+        p->s = pnouv ;
+        return p ;
+}
+
+Bool pile_vide(struct list* p) { return p == NULL ; }
+// pre pilevide == false
+Ident pile_top(struct list* p){ return p->v ; }
+
+struct list* depile(struct list* p){
+        if (p == NULL) return NULL ;
+        struct list* piletmp = p->s ; 
+        FREE(p) ;
+        return piletmp ;
+}
+
+
+Nat hauteur_genealogie_de(Genealogie g, Nat x){
+        // x valide 
+        if (x == omega) return 0 ;
+        Nat hg = 1 + hauteur_genealogie_de( g, getByIdent(g, x)->idpere ) ;
+        Nat hd = 1 + hauteur_genealogie_de( g, getByIdent(g, x)->idmere ) ;
+        if (hg > hd) return hg ;
+        return hd ;
+}
+
+Ident aineDeFratrie(Genealogie g, Ident x){
+        Individu idv = getByIdent(g, x) ;
+        if (idv==NULL) return omega ;
+        if (idv->idpere == omega && idv->idmere == omega) return x ; // tu es l aine si tu n a pas de parents
+        if (idv->idpere != omega) return getByIdent(g, idv->idpere)->ifaine ;
+        return getByIdent(g, idv->idmere)->ifaine ;
+}
+
+// PRE idv a != NULL
+// prend un arguent deux ainés, les attache snas imortance a l ordre, ajoute le cadet du plus grand à la pile. retourne ainée
+// a est placé devant b, le debut de b devient la fin de a
+Individu concat_cadet(Genealogie g, Individu a, Individu b, struct list* lien){
+        // concatenne a et b
+        // parcourir a 
+        Individu idv = a ;
+
+        while(idv->icadet != omega) idv = getByIdent(g, idv->icadet) ;
+        
+        // attacher le dernier element de a à b
+        if (b != NULL)
+                idv->icadet = b->id ;
+        else 
+                idv->icadet = omega ;
+
+        // empiler a pour remettre son cadet a NULL plus tard
+        empile(lien, idv->id) ;
+        return a ;
+}
+
+void attache_gen_parente(Genealogie g,Ident x,  Individu *lst, struct list* liens){
+        // si x null : rien a faire
+        if (x == omega) return ;
+
+        // sinon, on prend la fratrie du pere et de la mere et on les attache
+        Individu idv = getByIdent(g, x) ;
+        Ident am = aineDeFratrie(g, idv->idmere) ;
+        Ident ap = aineDeFratrie(g, idv->idpere) ;
+
+        // on ajoute ap et am à lst[0]
+        if (ap == omega && am == omega) return ;
+        if (am != omega) lst[0] = concat_cadet(g, getByIdent(g, am), lst[0], liens) ;
+        if (ap != omega) lst[0] = concat_cadet(g, getByIdent(g, ap), lst[0], liens) ;
+
+        // recursion
+        attache_gen_parente(g, idv->idmere, lst+1, liens) ;
+        attache_gen_parente(g, idv->idpere, lst+1, liens) ; // +1 pour la gen suivante dans le tab
+}
+
+void detruire_liens_cadet(Genealogie g, struct list* liens){
+        struct list* l = liens ;
+        while (l != NULL) {
+                getByIdent( g, pile_top(l) )->icadet = omega ;
+                l = depile(l) ;
+        }
+}
+
+void lecture_gen(Genealogie g, Individu* lst, Chaine buff, Nat ngen){
+
+        Nat n = 0 ;
+        Car natbuf[8] ; // pourquoi pas 2 ?
+        Ident x ;
+
+        for (Nat i = 0 ; i < ngen ; i++){
+                x = lst[i]->id ;
+
+                // preface
+                ajouteBufferN(buff,&n, "- ") ;
+                NatToChaine(i+1, natbuf) ;
+                ajouteBufferN(buff,&n, natbuf) ;
+                ajouteBufferN(buff,&n, " :\n") ;
+
+                // afficher liste
+                while (x != omega){
+                        ajouteBufferN(buff, &n, getByIdent(g,x)->nom) ;
+                        ajouteBufferN(buff, &n, " ") ;
+                        x = getByIdent(g, x)->icadet ;
+                }
+                ajouteBufferN(buff,&n ,"\n") ;
+        }
+}
 
 void affiche_tableaux(Genealogie g){
         // mes tests
@@ -604,13 +799,6 @@ void affiche_tableaux(Genealogie g){
                 printf("%2d\n", g->rang[i]) ;
         } 
 }
-
-
-//
-/// VOS FONCTIONS AUXILIAIRES
-/// ///////////////////////////////////////////////////////
-///
-
 //
 /// MAIN
 /// ///////////////////////////////////////////////////////
@@ -791,9 +979,6 @@ int main() {
         printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)),
                nomIndividu(getByIdent(g, ia2)),
                estAncetre(g, ijfl, ia2) ? "oui" : "non");
-
-        printf("INDICE\n") ;
-
         printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)),
                nomIndividu(getByIdent(g, irose)),
                estAncetre(g, ijfl, irose) ? "oui" : "non");
