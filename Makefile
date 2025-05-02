@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -I$(INC_DIR) -Wall -Wextra -g -Wno-unused-parameter
 
 # Target program
-TARGET = genealogie.c
+TARGET = genealogie
 
 # Default target
 all: $(TARGET)
