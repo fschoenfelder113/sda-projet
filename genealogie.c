@@ -67,11 +67,23 @@ void affiche_enfants(Genealogie g, Ident x, Chaine buff);
 void affiche_cousins(Genealogie g, Ident x, Chaine buff);
 void affiche_oncles(Genealogie g, Ident x, Chaine buff);
 
+// PARTIE 3: PROTOTYPES des operations imposees
+void deviennent_freres_soeurs(Genealogie g, Ident x, Ident y);
+void devient_pere(Genealogie g, Ident x, Ident y);
+void devient_mere(Genealogie g, Ident x, Ident y);
+
 // PROTOTYPES DE VOS FONCTIONS INTERMEDIAIRES
 
 Bool date_is_null(Date d) ;
 
-Bool parent_compatible(Ident pa, Ident ma, Ident pb, Ident mb, Ident* p, Ident* m) ;
+Bool parent_compatible(Ident* pa, Ident* ma, Ident* pb, Ident* mb) ;
+
+void ajouteBufferN(Chaine buff, Nat* n, Chaine str) ;
+void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) ;
+void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n);
+void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n);
+
+Ident aine(Genealogie g, Ident id) ;
 
 /// PARTIE 1: Construction de l�arbre g�n�alogique et acc�s 
 /// ///////////////////////////////////////////////////////
@@ -338,8 +350,9 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm)
 	// la fonction vérifie la compatibilité des 4 parents met l union dans pere et mere en cas de succes, on fait ceci pour tous
 	// on veut aussi vérifier que le fils ajouté est bien plus jeune que les parents
 
-	if (!parent_compatible(pp, mm, idv_x->idpere, idv_x->idmere, &idv_x->idpere, &idv_x->idmere)) return ;
-	if (!parent_compatible(idv_fils->idpere, idv_fils->idmere, idv_x->idpere, idv_x->idmere, &idv_x->idpere, &idv_x->idmere)) return ;
+	Ident p = pp ; Ident m = mm ; // inutile
+	if (!parent_compatible(&p, &m, &idv_x->idpere, &idv_x->idmere)) return ;
+	if (!parent_compatible(&idv_fils->idpere, &idv_fils->idmere, &idv_x->idpere, &idv_x->idmere)) return ;
 
 	if (idv_x->idpere != omega && compDate( getByIdent(g, idv_x->idpere)->naiss, idv_x->naiss) > 0) return ;
 	if (idv_x->idmere != omega && compDate( getByIdent(g, idv_x->idmere)->naiss, idv_x->naiss) > 0) return ;
@@ -362,9 +375,9 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm)
 		return  ;
 	}
 	while(courant != NULL){
-		// mettre a jour les parents de la fratrie
-		courant->idpere = idv_x->idpere ;
-		courant->idmere = idv_x->idmere ;
+		// mettre a jour les parents de la fratrie defaut partiel de complexité en allant jusqu au bout, mais ca reste du meme ordre n**2
+		if (courant->idpere == idv_x->idpere) courant->idpere = idv_x->idpere;
+		if (courant->idmere == idv_x->idmere) courant->idmere = idv_x->idmere;
 		// si on a pas trouvé idv on chercher a affecter le point d insertion
 		if (point_insert == NULL){
 			if (compDate(idv_x->naiss, courant->naiss) < 0)
@@ -382,6 +395,8 @@ void adjFils(Genealogie g, Ident idx, Ident fils, Ident pp, Ident mm)
 	Ident tmp_cadet = point_insert->icadet ;
 	point_insert->icadet = idx ;
 	idv_x->icadet = tmp_cadet ;
+		if (idv_x->idpere != omega) getByIdent(g, idv_x->idpere)->ifaine = fils ;
+		if (idv_x->idmere != omega) getByIdent(g, idv_x->idmere)->ifaine = fils ;
 }
 
 //PRE:  (p==omega || getByIdent(g,p)!=NULL) && (m==omega || getByIdent(g,m)!=NULL) &&
@@ -427,6 +442,131 @@ Ident adj(Genealogie g, Chaine s, Ident p, Ident m, Date n, Date d)
 	return g->id_cur ;
 }
 
+
+
+// 
+/// PARTIE 2: Affichages 
+/// ///////////////////////////////////////////////////////
+/// 
+
+//PRE: None
+void affiche_freres_soeurs(Genealogie g, Ident x, Chaine buff)
+{
+	if (g == NULL || getByIdent(g, x) == NULL) return ;
+	
+	Nat n = 0 ;
+	affiche_freres_soeurs_n(g, x, buff, &n) ;
+}
+
+//PRE: None
+void affiche_enfants(Genealogie g, Ident x, Chaine buff)
+{
+	if (g == NULL || getByIdent(g, x) == NULL) return ;
+	
+	Nat n = 0 ;
+	affiche_enfants_n(g, x, buff, &n) ;
+}
+
+//PRE: None
+void affiche_cousins(Genealogie g, Ident x, Chaine buff)
+{
+	if (g == NULL || getByIdent(g, x) == NULL) return ;
+	
+	Nat n = 0 ;
+	affiche_neveux_n(g, getByIdent(g, x)->idpere, buff, &n) ;
+	affiche_neveux_n(g, getByIdent(g, x)->idmere, buff, &n) ;
+}
+
+//PRE: None
+void affiche_oncles(Genealogie g, Ident x, Chaine buff)
+{
+	if (g == NULL || getByIdent(g, x) == NULL) return ;
+	
+	Nat n = 0 ;
+	affiche_freres_soeurs_n(g, getByIdent(g, x)->idpere, buff, &n) ;
+	affiche_freres_soeurs_n(g, getByIdent(g, x)->idmere, buff, &n) ;
+}
+
+//
+/// PARTIE 3
+/////////////////////////////////////////////////////////////
+///
+
+void deviennent_freres_soeurs(Genealogie g, Ident x, Ident y) {
+	if (g == NULL || x == omega || y  == omega) return;
+
+	Individu ix = getByIdent(g, aine(g, x) );
+	Individu iy = getByIdent(g, aine(g, y) );
+
+	// Vérifier et unifier les parents
+	if (!parent_compatible(&ix->idpere, &ix->idmere, &iy->idpere, &iy->idmere))
+		return;  // parents incompatibles et fusionées sur x
+
+	Ident ys = iy->id ;
+	Ident yc = ys ;
+	while(ys != omega){
+		ys = getByIdent(g, ys)->icadet ;
+		adjFils(g, yc, ix->id, getByIdent(g, x)->idpere, getByIdent(g, x)->idmere) ;
+		yc = ys ;
+	}
+}
+
+void devient_pere(Genealogie g, Ident x, Ident y){
+	// si x ou g omega impossible
+	if(g == NULL) return ;
+	Individu idv_x = getByIdent(g, x) ;
+	Individu idv_y = getByIdent(g, y) ;
+	if (idv_x == NULL || idv_y == NULL) return ;
+
+	// si oncompatible se n est pas possible
+	Ident p = x ;
+	Ident m  = omega ;
+	if (!parent_compatible(&idv_x->idpere, &idv_x->idmere, &p, &m )) return ;
+
+	if ( m != omega && getByIdent(g, m)->ifaine != omega){
+		
+		deviennent_freres_soeurs(g, getByIdent(g, m)->ifaine, y) ;
+	
+	} if (getByIdent(g, p)->ifaine != omega){
+	
+		deviennent_freres_soeurs(g, getByIdent(g, p)->ifaine, y) ;
+	
+	} else {
+		
+		// parent n ont pas d enfant donc on rajoute juste x en aine
+		getByIdent(g, p)->ifaine = aine(g, y) ;
+		if (m != omega) getByIdent(g, m)->ifaine = aine(g, y) ; 
+	}
+}
+
+void devient_mere(Genealogie g, Ident x, Ident y){
+	// si x ou g omega impossible
+	if(g == NULL) return ;
+	Individu idv_x = getByIdent(g, x) ;
+	Individu idv_y = getByIdent(g, y) ;
+	if (idv_x == NULL || idv_y == NULL) return ;
+
+	// si oncompatible se n est pas possible
+	Ident m = x ;
+	Ident p  = omega ;
+	if (!parent_compatible(&idv_x->idpere, &idv_x->idmere, &p, &m )) return ;
+
+	if ( p != omega && getByIdent(g, p)->ifaine != omega){
+		
+		deviennent_freres_soeurs(g, getByIdent(g, p)->ifaine, y) ;
+	
+	} if (getByIdent(g, m)->ifaine != omega){
+	
+		deviennent_freres_soeurs(g, getByIdent(g, m)->ifaine, y) ;
+	
+	} else {
+		
+		// parent n ont pas d enfant donc on rajoute juste x en aine
+		getByIdent(g, m)->ifaine = aine(g, y) ;
+		if (p != omega) getByIdent(g, p)->ifaine = aine(g, y) ; 
+	}
+}
+
 // 
 /// VOS FONCTIONS AUXILIAIRES 
 /// ///////////////////////////////////////////////////////
@@ -436,20 +576,104 @@ Bool date_is_null(Date d){
 	return d.annee==0 && d.jour==0 && d.mois==0 ;
 }
 
-Bool parent_compatible(Ident pa, Ident ma, Ident pb, Ident mb, Ident* p, Ident* m){
-	Bool compat_pere = (pa == omega || pb == omega || pa == pb);
-	Bool compat_mere = (ma == omega || mb == omega || ma == mb);
+Bool parent_compatible(Ident* pa, Ident* ma, Ident* pb, Ident* mb) {
 
-    // Si les deux parents sont compatibles, on peut faire l'union
+	// si aucunu parent : incompatible pour nous
+	if (*pa + *pb + *ma + *mb == 0) return faux ;
+
+	// Vérifie la compatibilité des pères
+	Bool compat_pere = (*pa == omega || *pb == omega || *pa == *pb);
+	// Vérifie la compatibilité des mères
+	Bool compat_mere = (*ma == omega || *mb == omega || *ma == *mb);
+
 	if (compat_pere && compat_mere) {
-		*p = (pa != omega) ? pa : pb;  // Si un parent est inconnu, prendre celui valide
-		*m = (ma != omega) ? ma : mb;
+		// Fusionner les valeurs : si un parent est omega, on copie l'autre
+		if (*pa == omega) *pa = *pb;
+		if (*pb == omega) *pb = *pa;
+
+		if (*ma == omega) *ma = *mb;
+		if (*mb == omega) *mb = *ma;
 		return vrai;
 	}
-
-	return faux;  // Incompatibilité, union impossible
+	return faux;
 }
 
+void ajouteBufferN(Chaine buff, Nat* n, Chaine str){
+        chaineCopie(buff+*n, str) ;
+        *n += chaineLongueur(str) ;
+}
+
+// PRE: None
+void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) {
+        // pas de securité sur la taille du buffer, mais il aurait fallue un type [] pour que ce soit simple
+
+        // pour recuperer tous les freres et soeur, on accède son parent. et on les ajoute au buf
+        if (x == omega) return ; // pas de frere et soeur
+
+        Ident ifils ;
+        Individu idv = getByIdent(g, x) ;
+        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
+        if (idv->idpere == omega) ifils = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
+        else ifils = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
+        
+        // on a l ainée, maientant on boucle et a chque fois on ajoute le contenue de n à lngchaine en gardant n.
+        Individu a ;
+        while ( ifils != omega){
+                a = getByIdent(g, ifils) ;
+                if (idv->id != a->id){
+                        ajouteBufferN(buff, n, a->nom) ;
+                        ajouteBufferN(buff, n, " ") ;
+                }
+                ifils = a->icadet ;
+        }
+}
+
+void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n){
+        if (x == omega) return ;
+        Ident f = getByIdent(g, x)->ifaine;
+        Individu a ;
+        while (f != omega){
+                // ajoute a la chaine
+                a = getByIdent(g, f) ;
+                ajouteBufferN(buff, n, a->nom) ;
+                ajouteBufferN(buff, n, " ") ;
+                f = a->icadet ;
+        }
+}
+
+void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n){
+        if (x == omega) return ;
+        Ident frSr ;
+        // recuperer l ainée de x a partir d un des ses parents
+        Individu idv = getByIdent(g, x) ;
+        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
+        if (idv->idpere == omega) frSr = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
+        else frSr = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
+        
+        // on a l'ainée mainetnant qu on parcour et ajoute la liste dnenfant au buffer en esperant aucune consanguinité
+
+        while(frSr != omega){
+                if (frSr != x){ // on affiche pas lui meme
+                        affiche_enfants_n(g, frSr, buff,n) ;
+                }
+                frSr = getByIdent(g, frSr)->icadet ;
+        }
+
+}
+
+Ident aine(Genealogie g, Ident id){
+	Individu idv ;
+	if (g == NULL || (idv = getByIdent(g, id)) == NULL) return omega ;
+
+	// regarder parents, si pas de parents omega 
+	if ( idv->idpere == omega && idv->idmere == omega ) return id ;
+	if (idv->idpere != omega) 
+		return getByIdent(g, idv->idpere)->ifaine ;
+	else 
+		return getByIdent(g,idv->idmere)->ifaine ;
+}
+
+// a supprimer
 void affiche_tableaux(Genealogie g){
         // mes tests
         Individu tmpidv ;
@@ -525,25 +749,42 @@ int main()
 	Date mn = { 30, 10, 1949 };
 	Ident imw = adj(g, "Molly", ipre, 0, mn, dnull);
 
-	// ajouter ici les autres individus
-	Ident ig = omega;  // Ginny
-	Ident irose = omega; // Rose
-	Ident ir = omega; // Ron
-	Ident ia2 = omega; // Albus
-	Ident ibill = omega; // Bill
-	Ident ij = omega; // James (son of Harry)
-	Ident ihg = omega; // Hermione
+	Date gn = {11, 8, 1981 } ;
+        Ident ig = adj(g, "Ginny", iaw, imw, gn, dnull) ;     // Ginny
 
+        Date rn = {1, 3, 1980 } ;
+        Ident ir = adj(g, "Ron", iaw, imw, rn, dnull) ;    // Ron
+
+        Date billn = {29, 11, 1970 } ;
+        Ident ibill = adj(g, "Bill", iaw, imw, billn, dnull) ; // Bill
+
+        Date hgn = {19, 9, 1980} ;
+        Ident ihg = adj(g, "Hermione", omega, omega, hgn, dnull) ;   // Hermione
+
+        Date rosen = {6, 8, 2006} ;
+        Ident irose = adj(g, "Rose", ir, ihg, rosen, dnull) ;
+
+        Date a2n = {15, 8, 2006} ;
+        Ident ia2 = adj(g, "Albus", ih, ig, a2n, dnull) ;   // Albus
+
+        Date jn = {1, 5, 2005} ;
+        Ident ij = adj(g, "James", ih, ig, jn, dnull);    // James (son of Harry)
+
+        // lily fred et george
+
+        Date ln = {2, 5, 2008} ;
+        Ident il = adj(g, "Lily", ih, ig, ln, dnull) ;
+
+        Date fgn = { 1, 4, 1978 } ;
+        Date geord = {5, 6, 1998} ;
+        Ident ifred = adj(g, "Fred", iaw, imw, fgn, geord) ;  
+        Ident igeor = adj(g, "George", iaw, imw, fgn, dnull) ;  
 	for (Nat i = 0; i < cardinal(g); i++) {
 		printf("%s\n", nomIndividu(kieme(g,i)));
 	}
 	printf("nb_individus: %d\n", cardinal(g));
 	printf("Identifiant de Fabian: %u (must be 9)\n", ifab);
 	printf("Identifiant de Arthur: %u (must be 7)\n", iaw);
-
-	affiche_tableaux(g) ;
-
-/*
 
 	printf("\nAdding more people:\n");
 	Date dgid = { 7, 2, 1945 }; Date ddgid = { 21,12, 1982 };
@@ -554,7 +795,8 @@ int main()
 	Ident ihugo = adj(g, "Hugo", 0, 0, dhugo, dnull);
 	printf("Linking Hugo as son of Hermione\n");
 	devient_mere(g, ihg, ihugo);
-
+	affiche_tableaux(g) ;
+	
 	printf("\nTry to add a double Harry:\n");
 	Date hu2n = { 31, 7, 1980 };
 	Ident ihu2 = adj(g, "Harry", 0, 0, hu2n, dnull);
@@ -604,7 +846,7 @@ int main()
 	buf[0] = 0;  affiche_oncles(g, ir, buf);
 	printf("%s\n", buf);
 
-
+/*
 	printf("\n******* les ancetres:\n");
 	printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)), nomIndividu(getByIdent(g, ia2)), estAncetre(g, ijfl, ia2) ? "oui" : "non");
 	printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)), nomIndividu(getByIdent(g, irose)), estAncetre(g, ijfl, irose) ? "oui" : "non");
