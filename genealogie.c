@@ -32,7 +32,7 @@ typedef struct s_genealogie {
 	// a completer ici
         Nat nb_individus ;
         Ident id_cur ;
-        Ident* rang ;
+        Nat* rang ;
         Nat taille_max_tab ;
 } *Genealogie;
 
@@ -72,6 +72,13 @@ void deviennent_freres_soeurs(Genealogie g, Ident x, Ident y);
 void devient_pere(Genealogie g, Ident x, Ident y);
 void devient_mere(Genealogie g, Ident x, Ident y);
 
+// PARTIE 4: PROTOTYPES des operations imposees
+Bool estAncetre(Genealogie g, Ident x, Ident y);
+Bool ontAncetreCommun(Genealogie g, Ident x, Ident y);
+Ident plus_ancien(Genealogie g, Ident x);
+void affiche_parente(Genealogie g, Ident x, Chaine buf);
+void affiche_descendance(Genealogie g, Ident x, Chaine buf);
+
 // PROTOTYPES DE VOS FONCTIONS INTERMEDIAIRES
 
 Bool date_is_null(Date d) ;
@@ -84,6 +91,16 @@ void affiche_enfants_n(Genealogie g, Ident x, Chaine buff, Nat *n);
 void affiche_neveux_n(Genealogie g, Ident x, Chaine buff, Nat *n);
 
 Ident aine(Genealogie g, Ident id) ;
+
+void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x );
+Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y);
+
+
+void attache_gen_parente(Genealogie g,Ident x,Individu* lgen,Nat igen,Individu* llien,Nat ilien) ;
+void attache_gen_descendance(Genealogie g,Ident x,Individu* lgen,Nat igen,Individu* llien,Nat ilien) ;
+void lecture_gen(Individu* lgen,Nat igen, Chaine buff) ;
+void detache_gen(Individu* llien, Nat ilien) ;
+
 
 /// PARTIE 1: Construction de l�arbre g�n�alogique et acc�s 
 /// ///////////////////////////////////////////////////////
@@ -120,7 +137,7 @@ void genealogieInit(Genealogie *g)
 		return ;
 	}
 
-	(*g)->rang = MALLOCN(Ident, TAILLE_INIT) ;
+	(*g)->rang = MALLOCN(Nat, TAILLE_INIT) ;
 	if ((*g)->rang == NULL){
 		*g = NULL ;
 		return ;
@@ -178,7 +195,7 @@ void freeIndividu(Individu id)
 Chaine nomIndividu(Individu ind) {
 	if (ind != NULL)
 		return ind->nom;
-	return NULL ;
+	return "" ;
 }
 Date naissIndividu(Individu ind) { 
 	if (ind != NULL)
@@ -311,7 +328,7 @@ void insert(Genealogie g, Nat pos, Chaine s, Ident p, Ident m, Date n, Date d)
 		g->taille_max_tab *= 2 ;	// avcec la nouvelle taille max
 		
 		nouv_tab = REALLOC(g->tab, Individu, g->taille_max_tab) ;
-		nouv_rang = REALLOC(g->rang, Ident, g->taille_max_tab) ;
+		nouv_rang = REALLOC(g->rang, Nat, g->taille_max_tab) ;
 		
 		if (nouv_tab == NULL || nouv_rang == NULL){
 			g->nb_individus-- ;
@@ -549,7 +566,7 @@ void devient_mere(Genealogie g, Ident x, Ident y){
 	// si oncompatible se n est pas possible
 	Ident m = x ;
 	Ident p  = omega ;
-	if (!parent_compatible(&idv_x->idpere, &idv_x->idmere, &p, &m )) return ;
+	if (!parent_compatible(&idv_x->idpere, &idv_y->idmere, &p, &m )) return ;
 
 	if ( p != omega && getByIdent(g, p)->ifaine != omega){
 		
@@ -566,6 +583,129 @@ void devient_mere(Genealogie g, Ident x, Ident y){
 		if (p != omega) getByIdent(g, p)->ifaine = aine(g, y) ; 
 	}
 }
+
+//
+/// PARTIE 4: Parcours de la genealogie
+/// ///////////////////////////////////////////////////////
+///
+
+// x ancetre de y ?
+// PRE: None
+Bool estAncetre(Genealogie g, Ident x, Ident y) {
+        // on suivra des algo recursifs
+	if (x == y) return true ;
+	if (g == NULL || y == omega) return faux ;
+	if (x == omega) vrai ;
+ 
+	Individu idv = getByIdent(g, y);
+        Ident p = idv->idpere;
+        Ident m = idv->idmere; 
+
+        if (p == x) return true ;
+        if (m == x) return true ;
+
+	if (p == omega) return false ;
+	if (m == omega) return false ;
+
+        return estAncetre(g, x, p) || estAncetre(g, x, m) ;
+}
+// PRE: None
+Bool ontAncetreCommun(Genealogie g, Ident x, Ident y) {
+ // fonction en plusieurs etapes :
+        // creer un tableau vontigue de Booleen composé du nombre totale de g+1 et tout mettre a 0 ou false
+        // parcourir x  et mettre true a chaque identifiant de parent recusivmement -> fonction a coté
+        // ensuite on parcour y et des qu on trouve un ancetre a case qui donné on stop
+
+	if (x == y) return true ;
+        if (g == NULL || getByIdent(g,x) == NULL || getByIdent(g, y) == NULL) return false ;
+
+        Bool* tab_ancetre = CALLOCN( Bool, g->nb_individus ) ; // +1 pour eviter futurs operations ;
+        //calloc met a 0 (false) 
+
+        remplirTabAncetreX(g, tab_ancetre, x) ;
+
+        Bool res = parcourirTabAncetre(g, tab_ancetre, y) ;
+
+        FREE(tab_ancetre) ;
+
+        return res ;
+}
+
+// PRE: None
+Ident plus_ancien(Genealogie g, Ident x) {
+        Individu idv = getByIdent(g, x);
+        if (idv == NULL) return omega; // Vérifie que x existe
+
+        Ident p = idv->idpere;
+        Ident m = idv->idmere;
+
+        // Si un seul parent est connu, retourne celui-ci directement
+        if (p == omega && m != omega) return plus_ancien(g, m);
+        if (m == omega && p != omega) return plus_ancien(g, p);
+
+        // Si aucun parent n'est connu, x est le plus ancien
+        if (p == omega && m == omega) return x;
+
+        // Recherche récursive du plus ancien ancêtre dans les deux branches
+        Ident ancetreP = plus_ancien(g, p);
+        Ident ancetreM = plus_ancien(g, m);
+
+        // Comparaison des dates pour trouver l'ancêtre le plus ancien
+        Individu idvP = getByIdent(g, ancetreP);
+        Individu idvM = getByIdent(g, ancetreM);
+
+        if (idvP != NULL && idvM != NULL) {
+        if (compDate(idvP->naiss, idvM->naiss) < 0) return ancetreP;
+        return ancetreM;
+        }
+
+        if (idvP != NULL) return ancetreP;
+        if (idvM != NULL) return ancetreM;
+
+        return x;
+}
+
+// PRE : NONE
+void affiche_parente(Genealogie g, Ident x, Chaine buff){
+	if (g == NULL || x == omega) return ;
+	Individu idv ;
+	if ((idv = getByIdent(g,x)) == NULL) return ;
+
+	/*
+	 * fonctionenment avvec un tableau référencant les générations et une pile d'adresse avec des cadet a remettre a 0 (il faut les detacher)
+	 */
+
+	// les tableaux de générations et lien interfratrie s incrémente avec l_add(l, x)
+	Individu* lgen = CALLOCN(Individu, TAILLE_INIT) ;
+	Nat igen ;
+	Individu* llien = CALLOCN(Individu, TAILLE_INIT) ;
+	Nat ilien =  0 ;
+
+	attache_gen_parente(g, x, lgen, igen, llien, ilien) ;
+
+	lecture_gen(lgen, igen, buff) ;
+
+	detache_gen(llien, ilien) ;
+}
+
+// PRE: None
+void affiche_descendance(Genealogie g, Ident x, Chaine buff){
+	if (g == NULL || x == omega) return ;
+	Individu idv ;
+	if ((idv = getByIdent(g,x)) == NULL) return ;
+
+	Individu* lgen = CALLOCN(Individu, TAILLE_INIT) ;
+	Nat igen ;
+	Individu* llien = CALLOCN(Individu, TAILLE_INIT) ;
+	Nat ilien =  0 ;
+
+	attache_gen_descendance(g, x, lgen, igen, llien, ilien) ;
+
+	lecture_gen(lgen, igen, buff) ;
+
+	detache_gen(llien, ilien) ;
+}
+
 
 // 
 /// VOS FONCTIONS AUXILIAIRES 
@@ -610,11 +750,8 @@ void affiche_freres_soeurs_n(Genealogie g, Ident x, Chaine buff,Nat *n) {
         // pour recuperer tous les freres et soeur, on accède son parent. et on les ajoute au buf
         if (x == omega) return ; // pas de frere et soeur
 
-        Ident ifils ;
+        Ident ifils  = aine(g, x);
         Individu idv = getByIdent(g, x) ;
-        if (idv->idpere == omega && idv->idmere == omega) return ; // pas de parents
-        if (idv->idpere == omega) ifils = getByIdent(g, idv->idmere)->ifaine ; // on utimise ainée de la mere
-        else ifils = getByIdent(g, idv->idpere)->ifaine ; // on utilise ainée de la mere
         
         // on a l ainée, maientant on boucle et a chque fois on ajoute le contenue de n à lngchaine en gardant n.
         Individu a ;
@@ -671,6 +808,65 @@ Ident aine(Genealogie g, Ident id){
 		return getByIdent(g, idv->idpere)->ifaine ;
 	else 
 		return getByIdent(g,idv->idmere)->ifaine ;
+}
+
+void remplirTabAncetreX(Genealogie g, Bool* tab, Ident x ){
+	//if (g == NULL || tab == NULL || x == omega ) return ;
+	Individu idv = getByIdent(g, x) ;
+        if (idv == NULL) return ;
+
+        tab[ x ] = vrai ; // il existe dans les ancetres
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+
+	if ( p != omega)
+		remplirTabAncetreX(g, tab, p) ;
+        if (m != omega)
+		remplirTabAncetreX(g, tab, m) ;
+}
+
+Bool parcourirTabAncetre(Genealogie g,Bool* tab, Ident y){
+        Individu idv = getByIdent(g, y) ;
+        if (idv == NULL) return false;
+
+        if (tab[y]) return true; // on s arrete si trouvé
+
+        Ident p = idv->idpere ;
+        Ident m = idv->idmere ;
+
+        return parcourirTabAncetre(g, tab, p) || parcourirTabAncetre(g, tab, m) ;
+}
+
+
+void attache_gen_parente(Genealogie g,Ident x,Individu* lgen,Nat igen,Individu* llien,Nat ilien) {}
+void attache_gen_descendance(Genealogie g,Ident x,Individu* lgen,Nat igen,Individu *llien,Nat ilien) {}
+void lecture_gen(Individu* lgen,Nat igen, Chaine buff) {}
+void detache_gen(Individu* llien, Nat ilien) {
+	// parcourir les idv et mettre leur cadet a omega
+	for(int i = 0 ; i < ilien ; i ++){
+		llien[i]->icadet = omega ;
+	}
+}
+
+Individu junior(Genealogie g, Ident x){
+	if (g == NULL || x == omega) return NULL ;
+	Individu idv = getByIdent(g, x) ;
+	while (idv->icadet != omega){
+		idv = getByIdent( g, idv->icadet ) ;
+	}
+	return idv ;
+}
+
+Individu* ladd(Individu* l, Nat* i, Nat* m, Individu x){
+	Individu* ln = l ;
+	if (*i >= *m){
+		*m *= 2 ;
+		ln = REALLOC (l, Individu, *m) ; // doubler la taille
+	}
+	ln[++(*i)] = x ;
+	return ln ; 
 }
 
 // a supprimer
@@ -795,7 +991,6 @@ int main()
 	Ident ihugo = adj(g, "Hugo", 0, 0, dhugo, dnull);
 	printf("Linking Hugo as son of Hermione\n");
 	devient_mere(g, ihg, ihugo);
-	affiche_tableaux(g) ;
 	
 	printf("\nTry to add a double Harry:\n");
 	Date hu2n = { 31, 7, 1980 };
@@ -846,7 +1041,6 @@ int main()
 	buf[0] = 0;  affiche_oncles(g, ir, buf);
 	printf("%s\n", buf);
 
-/*
 	printf("\n******* les ancetres:\n");
 	printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)), nomIndividu(getByIdent(g, ia2)), estAncetre(g, ijfl, ia2) ? "oui" : "non");
 	printf("%s ancetre de %s: %s\n", nomIndividu(getByIdent(g, ijfl)), nomIndividu(getByIdent(g, irose)), estAncetre(g, ijfl, irose) ? "oui" : "non");
@@ -857,7 +1051,7 @@ int main()
 
 	printf("\n******* ancetre plus ancien:\n");
 	printf("L'ancetre le plus ancien de %s est %s\n", nomIndividu(getByIdent(g, ia2)), nomIndividu(getByIdent(g, plus_ancien(g, ia2))));
-
+/*
 	printf("\n******* parente:\n");
 	printf("parents de %s\n", nomIndividu(getByIdent(g, ia2)));
 	buf[0] = 0; affiche_parente(g, ia2, buf);
@@ -867,12 +1061,12 @@ int main()
 	printf("descendence de %s\n", nomIndividu(getByIdent(g, ijm)));
 	buf[0] = 0;  affiche_descendance(g, ijm, buf);
 	printf("%s\n", buf);
-
+*/
 	printf("\n******* free:\n");
 	genealogieFree(&g);
 	printf("fin.(press key)\n");
 	fgets(buf, 2, stdin);
 	return 0;
-*/
+
 
 }
