@@ -532,6 +532,10 @@ void deviennent_freres_soeurs(Genealogie g, Ident x, Ident y) {
 	if (!parent_compatible(&ix->idpere, &ix->idmere, &iy->idpere, &iy->idmere))
 		return;  // parents incompatibles et fusionées sur x
 
+	// verifier que les aprents sont bien plus jeunes
+	if (ix->idmere != omega && compDate( getByIdent(g, ix->idmere)->naiss, iy->naiss ) > 0) return ;
+	if (ix->idpere != omega && compDate( getByIdent(g, ix->idpere)->naiss, iy->naiss ) > 0) return ;
+
 	Ident ys = iy->id ;
 	Ident yc = ys ;
 	while(ys != omega){
@@ -542,24 +546,22 @@ void deviennent_freres_soeurs(Genealogie g, Ident x, Ident y) {
 }
 
 void devient_pere(Genealogie g, Ident x, Ident y){
+	if (x == y) return ;
 	// si x ou g omega impossible
 	if(g == NULL) return ;
 	Individu idv_x = getByIdent(g, x) ;
 	Individu idv_y = getByIdent(g, y) ;
 	if (idv_x == NULL || idv_y == NULL) return ;
+	if (compDate( idv_x->naiss, idv_y->naiss ) > 0) return ;
 
 	// si oncompatible se n est pas possible
-	Ident p = x ;
-	Ident m  = omega ;
-	if (!parent_compatible(&idv_x->idpere, &idv_x->idmere, &p, &m )) return ;
+	// verifier compatibilité sans unification
+	Ident m = omega ; Ident p  = x ;
+	Ident py  = idv_y->idpere ; Ident my = idv_y->idmere ;
+	if (!parent_compatible(&py, &my, &p, &m )) return ;
 
-	if ( m != omega && getByIdent(g, m)->ifaine != omega){
-		
-		deviennent_freres_soeurs(g, getByIdent(g, m)->ifaine, y) ;
-	
-	} if (getByIdent(g, p)->ifaine != omega){
-	
-		deviennent_freres_soeurs(g, getByIdent(g, p)->ifaine, y) ;
+	if (idv_x->ifaine != omega){
+		deviennent_freres_soeurs(g, idv_x->ifaine, y) ;
 	
 	} else {
 		
@@ -570,24 +572,22 @@ void devient_pere(Genealogie g, Ident x, Ident y){
 }
 
 void devient_mere(Genealogie g, Ident x, Ident y){
+	if (x == y) return ;
 	// si x ou g omega impossible
 	if(g == NULL) return ;
 	Individu idv_x = getByIdent(g, x) ;
 	Individu idv_y = getByIdent(g, y) ;
 	if (idv_x == NULL || idv_y == NULL) return ;
+	if (compDate( idv_x->naiss, idv_y->naiss ) > 0) return ;
 
 	// si oncompatible se n est pas possible
-	Ident m = x ;
-	Ident p  = omega ;
-	if (!parent_compatible(&idv_x->idpere, &idv_y->idmere, &p, &m )) return ;
+	// verifier compatibilité sans unification
+	Ident m = x ; Ident p  = omega ;
+	Ident py  = idv_y->idpere ; Ident my = idv_y->idmere ;
+	if (!parent_compatible(&py, &my, &p, &m )) return ;
 
-	if ( p != omega && getByIdent(g, p)->ifaine != omega){
-		
-		deviennent_freres_soeurs(g, getByIdent(g, p)->ifaine, y) ;
-	
-	} if (getByIdent(g, m)->ifaine != omega){
-	
-		deviennent_freres_soeurs(g, getByIdent(g, m)->ifaine, y) ;
+	if (idv_x->ifaine != omega){
+		deviennent_freres_soeurs(g, idv_x->ifaine, y) ;
 	
 	} else {
 		
@@ -632,7 +632,7 @@ Bool ontAncetreCommun(Genealogie g, Ident x, Ident y) {
 	if (x == y) return vrai ;
         if (g == NULL || getByIdent(g,x) == NULL || getByIdent(g, y) == NULL) return faux ;
 
-        Bool* tab_ancetre = CALLOCN( Bool, g->nb_individus ) ; // +1 pour eviter futurs operations ;
+        Bool* tab_ancetre = CALLOCN( Bool, g->nb_individus+1 ) ; // +1 pour eviter futurs operations ;
         //calloc met a 0 (faux) 
 
         remplirTabAncetreX(g, tab_ancetre, x) ;
@@ -686,7 +686,6 @@ void affiche_parente(Genealogie g, Ident x, Chaine buff){
 
 	Nat hauteur = hauteur_from(g, x) ;
 
-	Nat igen = 0 ;			// indice de l
 	Nat ilien = 0 ;
 	Individu* lgen = CALLOCN(Individu, hauteur-1) ;
 	Individu* llien = CALLOCN(Individu, g->nb_individus) ;
@@ -707,7 +706,7 @@ void affiche_descendance(Genealogie g, Ident x, Chaine buff){
 	if ((idv = getByIdent(g,x)) == NULL) return ;
 
 	Nat profondeur = profondeur_from(g, x) ;
-	Nat igen = 0 ; Nat ilien = 0 ;
+	Nat ilien = 0 ;
 	Individu* lgen = CALLOCN(Individu, profondeur-1) ;
 	Individu* llien = CALLOCN(Individu, g->nb_individus) ;
 
@@ -893,15 +892,15 @@ void attache_gen_descendance(Genealogie g, Ident x, Individu* lgen,Individu* lli
 
 void lecture_gen(Genealogie g, Individu* lgen,Nat igen, Chaine buff) {
 	Nat n = 0 ;
-	Car natfbuf[8] ;
+	Chaine natbuf = MALLOCN(Car, 16) ;
 	Ident x ;
 
 	for (Nat i = 0 ; i < igen ; i++){
 		x = lgen[i]->id ;
 		
 		ajouteBufferN(buff, &n, "- ") ;
-		NatToChaine(i+1, natfbuf) ;
-		ajouteBufferN(buff, &n, natfbuf) ;
+		NatToChaine(i+1, natbuf) ;
+		ajouteBufferN(buff, &n, natbuf) ;
 		ajouteBufferN(buff, &n, " :\n") ;
 
 		while(x != omega){
@@ -912,6 +911,7 @@ void lecture_gen(Genealogie g, Individu* lgen,Nat igen, Chaine buff) {
 
 		ajouteBufferN(buff, &n, "\n") ;
 	}
+	FREE(natbuf) ;
 }
 
 void detache_gen(Individu* llien, Nat ilien) {
@@ -1078,12 +1078,12 @@ int main()
         // lily fred et george
 
         Date ln = {2, 5, 2008} ;
-        Ident il = adj(g, "Lily", ih, ig, ln, dnull) ;
+        /*Ident il = */adj(g, "Lily", ih, ig, ln, dnull) ;
 
         Date fgn = { 1, 4, 1978 } ;
         Date geord = {5, 6, 1998} ;
-        Ident ifred = adj(g, "Fred", iaw, imw, fgn, geord) ;  
-        Ident igeor = adj(g, "George", iaw, imw, fgn, dnull) ;  
+        /*Ident ifred = */adj(g, "Fred", iaw, imw, fgn, geord) ;  
+        /*Ident igeor = */adj(g, "George", iaw, imw, fgn, dnull) ;  
 	for (Nat i = 0; i < cardinal(g); i++) {
 		printf("%s\n", nomIndividu(kieme(g,i)));
 	}

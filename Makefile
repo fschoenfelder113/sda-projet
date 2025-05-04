@@ -2,7 +2,7 @@
 CC = gcc
 
 # Flags
-CFLAGS = -I$(INC_DIR) -Wall -Wextra -g -Wno-unused-parameter
+CFLAGS = -I$(INC_DIR) -Wall -Wextra -g
 
 # Target program
 TARGET = genealogie
